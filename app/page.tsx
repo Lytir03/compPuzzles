@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { auth } from "@clerk/nextjs/server";
+import { getCurrentUser } from "@/auth/currentUser";
 
 const VALUE_PROPS = [
   "Ranked matchmaking",
@@ -10,8 +10,8 @@ const VALUE_PROPS = [
 ];
 
 export default async function LandingPage() {
-  const { userId } = await auth();
-  if (userId) {
+  const user = await getCurrentUser();
+  if (user) {
     redirect("/dashboard");
   }
 

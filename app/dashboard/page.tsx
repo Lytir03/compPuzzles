@@ -1,5 +1,5 @@
-import { auth } from "@clerk/nextjs/server";
-import { ensureUserProfile } from "@/auth/ensureUserProfile";
+import { redirect } from "next/navigation";
+import { getCurrentUser } from "@/auth/currentUser";
 import { GameRatingCard } from "@/components/GameRatingCard";
 import { GameType } from "@/database/generated/client/enums";
 
@@ -12,13 +12,12 @@ const GAME_TITLES: Record<string, string> = {
 const GAME_ORDER = [GameType.SUDOKU, GameType.CROSSWORD, GameType.NONOGRAM];
 
 export default async function DashboardPage() {
-  const { userId, redirectToSignIn } = await auth();
-  if (!userId) {
-    return redirectToSignIn();
+  const user = await getCurrentUser();
+  if (!user) {
+    redirect("/sign-in");
   }
 
-  const { user, ratings } = await ensureUserProfile();
-  const ratingByGame = new Map(ratings.map((r) => [r.gameType, r]));
+  const ratingByGame = new Map(user.ratings.map((r) => [r.gameType, r]));
 
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-12">

@@ -53,9 +53,11 @@ enum DisconnectStatus {
 
 model User {
   id        String   @id @default(cuid())
-  clerkId   String   @unique
+  // Both nullable: Phase 1 uses local username-only accounts (no Clerk yet).
+  // Populated once Clerk is reintroduced for a non-local deployment.
+  clerkId   String?  @unique
   username  String   @unique
-  email     String   @unique
+  email     String?  @unique
   avatarUrl String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

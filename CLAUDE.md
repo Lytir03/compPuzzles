@@ -32,8 +32,16 @@ per-game ratings, matchmaking, leaderboards, and match history. Full detail:
 
 - Next.js + React + TypeScript + Tailwind CSS
 - PostgreSQL + Prisma
-- Auth: **Clerk** — prebuilt UI/session management, fastest path to a working
-  login flow so effort goes into game logic instead of auth screens.
+- Auth: **Clerk, deferred.** SPEC §17 locks in Clerk, but as of 2026-08-11
+  the user asked to skip it while the build stays local-only — no point
+  standing up a hosted auth provider for a single-machine demo. Current
+  stand-in: a local username-only session (no password) in `auth/session.ts`
+  (httpOnly cookie), `auth/currentUser.ts`, `auth/login.ts` (upserts a `User`
+  by username, no identity check), and `auth/logout.ts`. `User.clerkId` and
+  `User.email` are nullable in the schema for exactly this reason. Swap Clerk
+  back in through this same seam (those four files) once there's an actual
+  reason to deploy somewhere other than localhost — don't let this stand-in
+  quietly become permanent.
 - Realtime: **Socket.IO** — automatic reconnection (needed for the disconnect
   grace-period requirement) and room support (one room per match) without
   hand-rolling either.
@@ -116,11 +124,8 @@ Postgres runs locally via Docker (`docker-compose.yml` at repo root, service
 `postgres`, port 5432) — no managed/cloud DB needed at this stage. Bring it up
 with `docker compose up -d` before running migrations or `npm run dev`.
 
-Clerk requires a real application: create one at https://dashboard.clerk.com
-and paste its publishable/secret keys into `.env.local` (see `.env.example`
-for the full variable list) — sign-in/sign-up won't work with the placeholder
-values until this is done. This is a manual, one-time step; there's no way to
-automate it.
+No Clerk setup needed right now — see the Tech stack section above for why
+auth is a local username-only stand-in instead.
 
 ## When in doubt
 
