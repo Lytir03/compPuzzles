@@ -153,6 +153,10 @@ model NonogramPuzzle {
 model Match {
   id           String      @id @default(cuid())
   gameType     GameType
+  // Denormalized from puzzle.difficulty at creation time (by construction
+  // always equal — createMatch() always picks a puzzle of the requested
+  // difficulty) so match-flow code has it at hand without an extra join.
+  difficulty   Difficulty
   puzzleId     String
   status       MatchStatus @default(WAITING)
   startedAt    DateTime?
@@ -231,15 +235,18 @@ model RatingChange {
 // Rows are ephemeral: deleted on match-found/cancel (Phase 3 logic), so this
 // unique constraint structurally prevents a user from double-queuing for one game.
 model MatchmakingQueueEntry {
-  id       String   @id @default(cuid())
-  userId   String
-  gameType GameType
-  rating   Float
-  region   String?
-  queuedAt DateTime @default(now())
+  id         String     @id @default(cuid())
+  userId     String
+  gameType   GameType
+  // Not in SPEC §9's example fields, but Phase 3 matches players who picked
+  // the same difficulty (see CLAUDE.md's Phase 3 notes) — needed to do that.
+  difficulty Difficulty
+  rating     Float
+  region     String?
+  queuedAt   DateTime   @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, gameType])
-  @@index([gameType, queuedAt])
+  @@index([gameType, difficulty, queuedAt])
 }

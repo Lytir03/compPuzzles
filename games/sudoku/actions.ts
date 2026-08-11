@@ -3,9 +3,9 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/auth/currentUser";
 import { prisma } from "@/database/client";
-import { Difficulty, GameType, PuzzleStatus } from "@/database/generated/client/enums";
-import { CELL_COUNT, gridFromString } from "./engine";
-import { validateCompletion } from "./validator";
+import { Difficulty, GameType } from "@/database/generated/client/enums";
+import { CELL_COUNT } from "./engine";
+import { sudokuGameDefinition } from "./gameDefinition";
 
 const GRID_STRING_PATTERN = /^[0-9]{81}$/;
 
@@ -15,45 +15,17 @@ export interface PracticePuzzle {
 }
 
 /**
- * Picks a puzzle for the signed-in user to practice, preferring one they
- * haven't attempted before (SPEC §13: "avoid showing the same user the same
- * puzzle repeatedly when possible") and falling back to any match once
- * they've exhausted the pool. Never returns the solution.
+ * Picks a puzzle for the signed-in user to practice. Reuses the same
+ * createMatch() a ranked match would use (see gameDefinition.ts), which
+ * already avoids puzzles this user has attempted before where possible
+ * (SPEC §13) — practice and ranked share one puzzle-selection path.
  */
 export async function startPracticePuzzle(difficulty: Difficulty): Promise<PracticePuzzle> {
   const user = await getCurrentUser();
   if (!user) redirect("/sign-in");
 
-  const where = {
-    gameType: GameType.SUDOKU,
-    difficulty,
-    status: PuzzleStatus.PUBLISHED,
-  } as const;
-
-  let candidates = await prisma.puzzle.findMany({
-    where: { ...where, attempts: { none: { userId: user.id } } },
-    select: { id: true },
-  });
-
-  if (candidates.length === 0) {
-    candidates = await prisma.puzzle.findMany({ where, select: { id: true } });
-  }
-
-  if (candidates.length === 0) {
-    throw new Error(`No ${difficulty} Sudoku puzzles available — run "npm run db:seed".`);
-  }
-
-  const chosen = candidates[Math.floor(Math.random() * candidates.length)];
-  const puzzle = await prisma.puzzle.findUniqueOrThrow({
-    where: { id: chosen.id },
-    include: { sudoku: true },
-  });
-
-  if (!puzzle.sudoku) {
-    throw new Error(`Puzzle ${puzzle.id} is missing its Sudoku data`);
-  }
-
-  return { puzzleId: puzzle.id, grid: puzzle.sudoku.grid };
+  const assignment = await sudokuGameDefinition.createMatch(difficulty, [user.id]);
+  return { puzzleId: assignment.puzzleId, grid: assignment.clientPayload };
 }
 
 export interface SubmitResult {
@@ -90,10 +62,7 @@ export async function submitPracticeSolution(
     throw new Error(`No Sudoku puzzle found for id ${puzzleId}`);
   }
 
-  const result = validateCompletion(
-    gridFromString(puzzle.sudoku.grid),
-    gridFromString(submittedGridString),
-  );
+  const result = sudokuGameDefinition.validateCompletion(puzzle.sudoku.grid, submittedGridString);
 
   await prisma.puzzleAttempt.create({
     data: {

@@ -8,6 +8,7 @@ export function GameRatingCard({
   wins,
   losses,
   practiceHref,
+  rankedHref,
 }: {
   title: string;
   rating: number;
@@ -15,6 +16,7 @@ export function GameRatingCard({
   wins: number;
   losses: number;
   practiceHref?: string;
+  rankedHref?: string;
 }) {
   const winRate = gamesPlayed > 0 ? Math.round((wins / gamesPlayed) * 100) : 0;
 
@@ -41,14 +43,23 @@ export function GameRatingCard({
           <dd className="tabular-nums">{winRate}%</dd>
         </div>
       </dl>
-      <button
-        type="button"
-        disabled
-        title="Matchmaking launches in Phase 3"
-        className="mt-2 w-full cursor-not-allowed rounded-lg bg-black/10 px-4 py-2 text-sm font-semibold text-black/40 dark:bg-white/10 dark:text-white/40"
-      >
-        PLAY RANKED
-      </button>
+      {rankedHref ? (
+        <Link
+          href={rankedHref}
+          className="mt-2 w-full rounded-lg bg-foreground px-4 py-2 text-center text-sm font-semibold text-background transition hover:opacity-90"
+        >
+          PLAY RANKED
+        </Link>
+      ) : (
+        <button
+          type="button"
+          disabled
+          title="Ranked matchmaking isn't built for this game yet"
+          className="mt-2 w-full cursor-not-allowed rounded-lg bg-black/10 px-4 py-2 text-sm font-semibold text-black/40 dark:bg-white/10 dark:text-white/40"
+        >
+          PLAY RANKED
+        </button>
+      )}
       {practiceHref && (
         <Link
           href={practiceHref}

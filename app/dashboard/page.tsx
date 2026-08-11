@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/auth/currentUser";
 import { GameRatingCard } from "@/components/GameRatingCard";
-import { GameType } from "@/database/generated/client/enums";
+import { prisma } from "@/database/client";
+import { GameType, MatchStatus } from "@/database/generated/client/enums";
 
 const GAME_TITLES: Record<string, string> = {
   [GameType.SUDOKU]: "Sudoku",
@@ -15,6 +16,10 @@ const PRACTICE_HREFS: Partial<Record<string, string>> = {
   [GameType.SUDOKU]: "/sudoku",
 };
 
+const RANKED_HREFS: Partial<Record<string, string>> = {
+  [GameType.SUDOKU]: "/sudoku/ranked",
+};
+
 export default async function DashboardPage() {
   const user = await getCurrentUser();
   if (!user) {
@@ -22,6 +27,15 @@ export default async function DashboardPage() {
   }
 
   const ratingByGame = new Map(user.ratings.map((r) => [r.gameType, r]));
+
+  const recentMatches = await prisma.matchParticipant.findMany({
+    where: { userId: user.id, match: { status: MatchStatus.COMPLETED } },
+    orderBy: { match: { completedAt: "desc" } },
+    take: 5,
+    include: {
+      match: { include: { participants: { include: { user: true } } } },
+    },
+  });
 
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-12">
@@ -42,6 +56,7 @@ export default async function DashboardPage() {
               wins={rating.wins}
               losses={rating.losses}
               practiceHref={PRACTICE_HREFS[gameType]}
+              rankedHref={RANKED_HREFS[gameType]}
             />
           );
         })}
@@ -49,9 +64,28 @@ export default async function DashboardPage() {
 
       <section className="mt-12">
         <h2 className="text-xl font-semibold">Recent matches</h2>
-        <p className="mt-2 text-sm text-black/60 dark:text-white/60">
-          No matches yet — ranked matchmaking arrives in a later phase.
-        </p>
+        {recentMatches.length === 0 ? (
+          <p className="mt-2 text-sm text-black/60 dark:text-white/60">No matches yet.</p>
+        ) : (
+          <ul className="mt-4 flex flex-col gap-2">
+            {recentMatches.map((participant) => {
+              const opponent = participant.match.participants.find((p) => p.userId !== user.id);
+              return (
+                <li
+                  key={participant.id}
+                  className="flex items-center justify-between rounded-lg border border-black/10 px-4 py-2 text-sm dark:border-white/10"
+                >
+                  <span>
+                    <span className="font-semibold">{participant.result}</span>{" "}
+                    <span className="text-black/60 dark:text-white/60">
+                      vs {opponent?.user.username ?? "?"} · {GAME_TITLES[participant.match.gameType]}
+                    </span>
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </section>
     </main>
   );

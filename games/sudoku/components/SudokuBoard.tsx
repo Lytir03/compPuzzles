@@ -9,6 +9,8 @@ export interface SudokuBoardProps {
   /** Freezes the board (used once a completion submission is in flight or done). */
   disabled?: boolean;
   onSubmit: (grid: number[], elapsedMs: number) => void;
+  /** Ranked mode only — reports every grid change for the opponent-progress broadcast. */
+  onProgress?: (grid: number[]) => void;
 }
 
 function cellDomId(index: number) {
@@ -22,7 +24,12 @@ const ARROW_MOVES: Record<string, [number, number]> = {
   ArrowRight: [0, 1],
 };
 
-export function SudokuBoard({ initialGrid, disabled = false, onSubmit }: SudokuBoardProps) {
+export function SudokuBoard({
+  initialGrid,
+  disabled = false,
+  onSubmit,
+  onProgress,
+}: SudokuBoardProps) {
   const given = useMemo(() => gridFromString(initialGrid), [initialGrid]);
   const [grid, setGrid] = useState<number[]>(() => [...given]);
   const [selected, setSelected] = useState<number | null>(null);
@@ -52,6 +59,10 @@ export function SudokuBoard({ initialGrid, disabled = false, onSubmit }: SudokuB
       onSubmit(grid, Date.now() - (startRef.current ?? Date.now()));
     }
   }, [isClean, grid, onSubmit]);
+
+  useEffect(() => {
+    onProgress?.(grid);
+  }, [grid, onProgress]);
 
   function setCellValue(index: number, value: number) {
     if (disabled || given[index] !== EMPTY) return;

@@ -1,16 +1,15 @@
 import "server-only";
 import { cookies } from "next/headers";
-
-const SESSION_COOKIE = "session_user_id";
+import { SESSION_COOKIE_NAME } from "./sessionCookie";
 
 export async function getSessionUserId(): Promise<string | null> {
   const store = await cookies();
-  return store.get(SESSION_COOKIE)?.value ?? null;
+  return store.get(SESSION_COOKIE_NAME)?.value ?? null;
 }
 
 export async function setSessionUserId(userId: string) {
   const store = await cookies();
-  store.set(SESSION_COOKIE, userId, {
+  store.set(SESSION_COOKIE_NAME, userId, {
     httpOnly: true,
     sameSite: "lax",
     path: "/",
@@ -22,5 +21,5 @@ export async function setSessionUserId(userId: string) {
 
 export async function clearSession() {
   const store = await cookies();
-  store.delete(SESSION_COOKIE);
+  store.delete(SESSION_COOKIE_NAME);
 }

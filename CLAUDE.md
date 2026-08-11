@@ -44,7 +44,14 @@ per-game ratings, matchmaking, leaderboards, and match history. Full detail:
   quietly become permanent.
 - Realtime: **Socket.IO** — automatic reconnection (needed for the disconnect
   grace-period requirement) and room support (one room per match) without
-  hand-rolling either.
+  hand-rolling either. It's a separate process from Next.js (port 4000 vs.
+  3000) — those are different origins, and the session cookie is
+  SameSite=Lax, which browsers don't reliably send on cross-origin
+  XHR/WebSocket handshakes. So socket auth does **not** use the cookie:
+  the client fetches its own userId same-origin via
+  `auth/realtimeToken.ts` and passes it as the socket handshake's
+  `auth.token` (see `realtime/auth.ts`). Don't "simplify" this back to
+  cookie-based auth — it'll silently fail in a real browser.
 - Deployment: **local only for now.** Everything (Next.js dev server, Socket.IO
   process, Postgres) runs on localhost — no hosting, no split-deployment
   concerns. This is a "get something working and demoable" build, not a
@@ -110,7 +117,7 @@ don't have to rediscover them:
 
 ```
 # dev server:                     npm run dev
-# realtime (Socket.IO) process:   N/A until Phase 3 — no realtime server exists yet
+# realtime (Socket.IO) process:   npm run realtime      (separate process, port 4000 by default — run alongside `npm run dev`)
 # run tests:                      npm run test          (npm run test:watch for watch mode)
 # lint:                           npm run lint
 # typecheck:                      npm run typecheck
