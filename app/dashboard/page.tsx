@@ -14,10 +14,12 @@ const GAME_ORDER = [GameType.SUDOKU, GameType.CROSSWORD, GameType.NONOGRAM];
 
 const PRACTICE_HREFS: Partial<Record<string, string>> = {
   [GameType.SUDOKU]: "/sudoku",
+  [GameType.NONOGRAM]: "/nonogram",
 };
 
 const RANKED_HREFS: Partial<Record<string, string>> = {
   [GameType.SUDOKU]: "/sudoku/ranked",
+  [GameType.NONOGRAM]: "/nonogram/ranked",
 };
 
 export default async function DashboardPage() {

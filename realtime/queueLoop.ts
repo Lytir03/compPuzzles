@@ -8,9 +8,9 @@ import { activeSockets } from "./state";
 
 type AppServer = Server<ClientToServerEvents, ServerToClientEvents>;
 
-// Only Sudoku has a registered GameDefinition right now (Phase 5/6 add the
-// others) — the tick just skips game types with nothing registered.
-const SUPPORTED_GAME_TYPES = [GameType.SUDOKU];
+// Crossword doesn't have a registered GameDefinition yet (Phase 6) — the
+// tick just skips game types with nothing registered.
+const SUPPORTED_GAME_TYPES = [GameType.SUDOKU, GameType.NONOGRAM];
 const DIFFICULTIES = [Difficulty.EASY, Difficulty.MEDIUM, Difficulty.HARD];
 
 let tickRunning = false;

@@ -14,6 +14,11 @@ const GAME_TITLES: Record<string, string> = {
 const GAME_ORDER = [GameType.SUDOKU, GameType.CROSSWORD, GameType.NONOGRAM];
 const PODIUM = ["🥇", "🥈", "🥉"];
 
+const RANKED_HREFS: Partial<Record<string, string>> = {
+  [GameType.SUDOKU]: "/sudoku/ranked",
+  [GameType.NONOGRAM]: "/nonogram/ranked",
+};
+
 function isGameType(value: string | undefined): value is GameType {
   return GAME_ORDER.includes(value as GameType);
 }
@@ -70,8 +75,11 @@ export default async function LeaderboardPage(props: PageProps<"/leaderboard">) 
           <p className="subtle-text mt-2 max-w-sm text-sm font-medium leading-6">
             No ranked {GAME_TITLES[gameType]} games have been completed yet. The first result gets the first spot.
           </p>
-          {gameType === GameType.SUDOKU && (
-            <Link href="/sudoku/ranked" className="game-button mt-6 rounded-xl px-6 py-3 text-sm font-black">
+          {RANKED_HREFS[gameType] && (
+            <Link
+              href={RANKED_HREFS[gameType]!}
+              className="game-button mt-6 rounded-xl px-6 py-3 text-sm font-black"
+            >
               Play the first match
             </Link>
           )}

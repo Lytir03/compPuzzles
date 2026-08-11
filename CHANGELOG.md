@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-08-11 (2)
+
+### Added
+
+- Ranked and practice Nonograms: procedurally generated puzzles (5×5/10×10/15×15), click-to-cycle and drag-to-paint board input, full matchmaking/rating reuse from Sudoku.
+
+### Verified
+
+- All 84 tests pass (35 new for Nonogram).
+- Lint, TypeScript checks, and the production build complete successfully.
+- Live two-socket test against the real server/DB: matched players get the identical puzzle, opponent progress relays correctly, a correct solve wins with a real rating change, all persisted correctly.
+
 ## 2026-08-11
 
 ### Added
