@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "compPuzzles — Compete. Solve. Climb.",
-  description: "Ranked 1v1 Sudoku, Mini Crosswords, and Nonograms.",
+  title: "CompPuzzles — Ranked Puzzle Battles",
+  description: "Race real players in Sudoku, Crosswords, and Nonograms. Win matches and climb the ranks.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -24,7 +24,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
+      <body className="flex min-h-full flex-col">
         <Navbar />
         {children}
       </body>

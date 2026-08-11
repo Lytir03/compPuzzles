@@ -108,19 +108,40 @@ export function SudokuBoard({
   }
 
   return (
-    <div className="flex flex-col items-center gap-4">
-      <div className="font-mono text-lg tabular-nums">{formatElapsed(elapsedMs)}</div>
+    <div className="flex w-full flex-col items-center gap-5">
+      <div className="flex items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-4 py-2 shadow-[0_3px_0_color-mix(in_srgb,var(--shadow)_10%,transparent)]">
+        <span className="text-sm" aria-hidden="true">⏱</span>
+        <span className="font-mono text-base font-black tabular-nums">{formatElapsed(elapsedMs)}</span>
+      </div>
 
       <div
         role="grid"
         aria-label="Sudoku board"
-        className="grid grid-cols-9 border-2 border-black/70 dark:border-white/70"
+        className="grid w-[min(92vw,29rem)] grid-cols-9 overflow-hidden rounded-2xl border-[3px] border-[#353a31] bg-[#353a31] shadow-[0_8px_0_#242820,0_18px_35px_rgba(30,35,26,.18)]"
       >
         {grid.map((value, index) => {
           const isGiven = given[index] !== EMPTY;
           const isConflict = conflicts.has(index);
           const r = rowOf(index);
           const c = colOf(index);
+          const isSelected = selected === index;
+          const selectedValue = selected === null ? EMPTY : grid[selected];
+          const isMatching = selectedValue !== EMPTY && value === selectedValue;
+          const isPeer =
+            selected !== null &&
+            (r === rowOf(selected) || c === colOf(selected)) &&
+            !isSelected;
+          const cellTone = isSelected
+            ? "bg-[#a9d889] text-[#254c12]"
+            : isConflict
+              ? "bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-300"
+              : isMatching
+                ? "bg-[#e7f3d9] text-[#4f812f] dark:bg-[#3a4b31] dark:text-[#bfe3a3]"
+                : isPeer
+                  ? "bg-[#f0eee5] dark:bg-[#363a34]"
+                  : isGiven
+                    ? "bg-[#e4e1d7] dark:bg-[#41453e]"
+                    : "bg-[var(--surface)]";
           return (
             <button
               key={index}
@@ -128,22 +149,19 @@ export function SudokuBoard({
               type="button"
               role="gridcell"
               aria-label={`Row ${r + 1}, column ${c + 1}${value !== EMPTY ? `, ${value}` : ""}`}
+              aria-selected={isSelected}
               disabled={disabled || isGiven}
               onFocus={() => setSelected(index)}
               onClick={() => setSelected(index)}
               onKeyDown={(e) => handleKeyDown(e, index)}
               className={[
-                "flex h-9 w-9 items-center justify-center text-lg outline-none sm:h-11 sm:w-11",
-                "border border-black/15 dark:border-white/15",
-                c % 3 === 0 ? "border-l-2 border-l-black/70 dark:border-l-white/70" : "",
-                r % 3 === 0 ? "border-t-2 border-t-black/70 dark:border-t-white/70" : "",
-                c === GRID_SIZE - 1 ? "border-r-2 border-r-black/70 dark:border-r-white/70" : "",
-                r === GRID_SIZE - 1 ? "border-b-2 border-b-black/70 dark:border-b-white/70" : "",
-                isGiven
-                  ? "bg-black/5 font-bold dark:bg-white/10"
-                  : "bg-transparent disabled:opacity-60",
-                isConflict ? "text-red-600" : "",
-                selected === index ? "bg-blue-500/15" : "",
+                "flex aspect-square w-full items-center justify-center border-b border-r border-[var(--line)] text-[clamp(1rem,4vw,1.35rem)] outline-none transition-colors",
+                "focus-visible:relative focus-visible:z-10 focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-[#4b91d1]/60 disabled:cursor-default",
+                c === 2 || c === 5 ? "border-r-[3px] border-r-[#353a31]" : "",
+                r === 2 || r === 5 ? "border-b-[3px] border-b-[#353a31]" : "",
+                isGiven ? "font-black text-[color-mix(in_srgb,var(--foreground)_86%,transparent)]" : "font-extrabold",
+                disabled && !isGiven ? "opacity-60" : "",
+                cellTone,
               ].join(" ")}
             >
               {value !== EMPTY ? value : ""}
@@ -152,14 +170,18 @@ export function SudokuBoard({
         })}
       </div>
 
-      <div className="grid grid-cols-5 gap-2 sm:grid-cols-10">
+      <div className="grid w-[min(92vw,34rem)] grid-cols-5 gap-2 sm:grid-cols-10">
         {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((digit) => (
           <button
             key={digit}
             type="button"
             disabled={disabled || selected === null || given[selected] !== EMPTY}
             onClick={() => selected !== null && setCellValue(selected, digit)}
-            className="h-10 w-10 rounded-lg border border-black/10 text-lg font-semibold disabled:opacity-30 dark:border-white/10"
+            className={`soft-button h-12 rounded-xl text-lg font-black disabled:cursor-not-allowed disabled:opacity-35 ${
+              selected !== null && grid[selected] === digit
+                ? "border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand-strong)]"
+                : ""
+            }`}
           >
             {digit}
           </button>
@@ -169,11 +191,14 @@ export function SudokuBoard({
           aria-label="Clear cell"
           disabled={disabled || selected === null || given[selected] !== EMPTY}
           onClick={() => selected !== null && setCellValue(selected, EMPTY)}
-          className="h-10 w-10 rounded-lg border border-black/10 text-sm disabled:opacity-30 dark:border-white/10"
+          className="soft-button h-12 rounded-xl text-sm font-black text-[var(--coral)] disabled:cursor-not-allowed disabled:opacity-35"
         >
-          ×
+          Clear
         </button>
       </div>
+      <p className="subtle-text text-center text-xs font-semibold">
+        Tap a square, then a number · Arrow keys work too
+      </p>
     </div>
   );
 }

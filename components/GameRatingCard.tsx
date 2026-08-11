@@ -1,6 +1,30 @@
 import Link from "next/link";
 import { RankBadge } from "@/components/RankBadge";
 
+const GAME_META: Record<
+  string,
+  { mark: string; accent: string; icon: string; description: string }
+> = {
+  Sudoku: {
+    mark: "bg-[#8dc860] text-[#264716] shadow-[0_4px_0_#5b9638]",
+    accent: "bg-[#79b74a]",
+    icon: "9",
+    description: "Classic number races",
+  },
+  Crosswords: {
+    mark: "bg-[#70a9df] text-[#173c62] shadow-[0_4px_0_#427caf]",
+    accent: "bg-[#4b91d1]",
+    icon: "A",
+    description: "Quick word battles",
+  },
+  Nonograms: {
+    mark: "bg-[#f4c45f] text-[#543c08] shadow-[0_4px_0_#c48c29]",
+    accent: "bg-[#f2b94b]",
+    icon: "▦",
+    description: "Picture logic duels",
+  },
+};
+
 export function GameRatingCard({
   title,
   rating,
@@ -19,55 +43,68 @@ export function GameRatingCard({
   rankedHref?: string;
 }) {
   const winRate = gamesPlayed > 0 ? Math.round((wins / gamesPlayed) * 100) : 0;
+  const meta = GAME_META[title] ?? GAME_META.Sudoku;
 
   return (
-    <div className="flex flex-col gap-4 rounded-xl border border-black/10 p-6 dark:border-white/10">
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold">{title}</h3>
+    <article className="game-panel group relative flex min-h-[340px] flex-col overflow-hidden rounded-3xl p-5 transition-transform duration-200 hover:-translate-y-1">
+      <span className={`absolute inset-x-0 top-0 h-1.5 ${meta.accent}`} />
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <span className={`grid h-12 w-12 place-items-center rounded-2xl text-xl font-black ${meta.mark}`}>
+            {meta.icon}
+          </span>
+          <div>
+            <h3 className="text-lg font-black tracking-tight">{title}</h3>
+            <p className="subtle-text text-xs font-semibold">{meta.description}</p>
+          </div>
+        </div>
         <RankBadge rating={rating} />
       </div>
-      <div className="text-3xl font-bold tabular-nums">{Math.round(rating)}</div>
-      <dl className="grid grid-cols-3 gap-2 text-sm text-black/60 dark:text-white/60">
-        <div>
-          <dt className="text-xs uppercase tracking-wide">Games</dt>
-          <dd className="tabular-nums">{gamesPlayed}</dd>
+      <div className="mt-6 flex items-end gap-2">
+        <div className="text-4xl font-black tracking-tight tabular-nums">{Math.round(rating)}</div>
+        <span className="subtle-text mb-1 text-xs font-bold uppercase tracking-widest">rating</span>
+      </div>
+      <dl className="mt-5 grid grid-cols-3 gap-2 rounded-2xl bg-[var(--surface-muted)] p-3 text-center">
+        <div className="rounded-xl bg-[color-mix(in_srgb,var(--surface)_64%,transparent)] px-1 py-2">
+          <dt className="subtle-text text-[10px] font-extrabold uppercase tracking-wide">Games</dt>
+          <dd className="mt-0.5 font-black tabular-nums">{gamesPlayed}</dd>
         </div>
-        <div>
-          <dt className="text-xs uppercase tracking-wide">W / L</dt>
-          <dd className="tabular-nums">
+        <div className="rounded-xl bg-[color-mix(in_srgb,var(--surface)_64%,transparent)] px-1 py-2">
+          <dt className="subtle-text text-[10px] font-extrabold uppercase tracking-wide">W / L</dt>
+          <dd className="mt-0.5 font-black tabular-nums">
             {wins} / {losses}
           </dd>
         </div>
-        <div>
-          <dt className="text-xs uppercase tracking-wide">Win rate</dt>
-          <dd className="tabular-nums">{winRate}%</dd>
+        <div className="rounded-xl bg-[color-mix(in_srgb,var(--surface)_64%,transparent)] px-1 py-2">
+          <dt className="subtle-text text-[10px] font-extrabold uppercase tracking-wide">Win rate</dt>
+          <dd className="mt-0.5 font-black tabular-nums">{winRate}%</dd>
         </div>
       </dl>
       {rankedHref ? (
         <Link
           href={rankedHref}
-          className="mt-2 w-full rounded-lg bg-foreground px-4 py-2 text-center text-sm font-semibold text-background transition hover:opacity-90"
+          className="game-button mt-5 w-full rounded-xl px-4 py-3 text-center text-sm font-black uppercase tracking-wide"
         >
-          PLAY RANKED
+          Play ranked <span aria-hidden="true">⚡</span>
         </Link>
       ) : (
         <button
           type="button"
           disabled
           title="Ranked matchmaking isn't built for this game yet"
-          className="mt-2 w-full cursor-not-allowed rounded-lg bg-black/10 px-4 py-2 text-sm font-semibold text-black/40 dark:bg-white/10 dark:text-white/40"
+          className="mt-5 w-full cursor-not-allowed rounded-xl bg-[var(--surface-muted)] px-4 py-3 text-sm font-black text-[color-mix(in_srgb,var(--foreground)_38%,transparent)]"
         >
-          PLAY RANKED
+          Coming soon
         </button>
       )}
       {practiceHref && (
         <Link
           href={practiceHref}
-          className="text-center text-sm font-medium hover:underline"
+          className="mt-3 text-center text-sm font-bold text-[var(--brand-strong)] hover:underline"
         >
-          Practice solo →
+          Warm up solo →
         </Link>
       )}
-    </div>
+    </article>
   );
 }

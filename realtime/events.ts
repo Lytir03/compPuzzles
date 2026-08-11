@@ -17,6 +17,9 @@ export interface MatchResultPayload {
   matchId: string;
   outcome: "WIN" | "LOSS" | "DRAW";
   reason: MatchEndReason;
+  /** Rounded — server-computed Glicko-2 update, never client input. */
+  ratingBefore: number;
+  ratingAfter: number;
 }
 
 export interface ClientToServerEvents {

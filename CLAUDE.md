@@ -16,7 +16,18 @@ per-game ratings, matchmaking, leaderboards, and match history. Full detail:
 
 - **Server is authoritative.** Never trust a client "I won" message. All win
   conditions, board validity, and rating changes are computed and verified
-  server-side.
+  server-side — chess.com is the reference model the user explicitly wants
+  followed here (2026-08-11): every outcome that matters is decided by the
+  server, never asserted by a client. Concretely: `validateCompletion()` and
+  `determineWinner()` (matchmaking/determineWinner.ts) run only server-side;
+  a client submission is re-checked against the puzzle's given cells, never
+  trusted. The one deliberate exception is the opponent-progress percentage
+  shown mid-match — purely cosmetic (SPEC has Sudoku hide opponents' actual
+  moves, unlike chess.com's shared board), can't affect who wins or any
+  rating, so it isn't worth re-deriving server-side from a full grid on
+  every keystroke. Apply this same bar to Nonogram/Crossword when they're
+  built: server decides the outcome, client input for anything else gets
+  scrutinized before being trusted.
 - **No solutions leaked early.** Puzzle solutions must never reach the client
   before match completion.
 - **Rating changes happen inside a DB transaction.** A match must never award

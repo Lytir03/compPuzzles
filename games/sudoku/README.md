@@ -8,4 +8,6 @@
 - `actions.ts` — Server Actions for single-player practice mode (Phase 2).
 - `components/` — `SudokuBoard` (interactive grid, shared by practice and ranked), `SudokuPractice` (practice difficulty picker + orchestration), `SudokuRankedMatch` (queue → countdown → live match → result).
 
-`rating.ts` (real Glicko-2 math) arrives in Phase 4 — ranked matches already work end-to-end (Phase 3) but don't touch rating yet. See `docs/SPEC.md` §14.
+Rating math isn't here — Glicko-2 (`rating/glicko2.ts`) and win/loss rules
+(`matchmaking/determineWinner.ts`) are identical across every game, so they
+live shared, not duplicated per game. See `docs/SPEC.md` §14.
