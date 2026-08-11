@@ -1,0 +1,243 @@
+// Prisma schema — see docs/SPEC.md §19 for the entity design this follows.
+// Datasource URL is supplied by prisma.config.ts (reads DATABASE_URL from .env.local),
+// not hardcoded here.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../database/generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum GameType {
+  SUDOKU
+  CROSSWORD
+  NONOGRAM
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum PuzzleStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum MatchStatus {
+  WAITING
+  IN_PROGRESS
+  COMPLETED
+  ABANDONED
+  CANCELLED
+}
+
+enum MatchResult {
+  WIN
+  LOSS
+  DRAW
+  ABANDONED
+}
+
+enum DisconnectStatus {
+  CONNECTED
+  DISCONNECTED
+  RECONNECTED
+  ABANDONED
+}
+
+model User {
+  id        String   @id @default(cuid())
+  clerkId   String   @unique
+  username  String   @unique
+  email     String   @unique
+  avatarUrl String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ratings           PlayerGameRating[]
+  matchParticipants MatchParticipant[]
+  puzzleAttempts    PuzzleAttempt[]
+  ratingChanges     RatingChange[]
+  queueEntries      MatchmakingQueueEntry[]
+  wonMatches        Match[]                  @relation("MatchWinner")
+}
+
+// Rating defaults below (1500 / 350 / 0.06) mirror rating/constants.ts —
+// keep both in sync manually if the initial values ever change (SPEC §5/§6).
+model PlayerGameRating {
+  id              String   @id @default(cuid())
+  userId          String
+  gameType        GameType
+  rating          Float    @default(1500)
+  ratingDeviation Float    @default(350)
+  volatility      Float    @default(0.06)
+  peakRating      Float    @default(1500)
+  gamesPlayed     Int      @default(0)
+  wins            Int      @default(0)
+  losses          Int      @default(0)
+  draws           Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, gameType])
+  @@index([gameType, rating])
+}
+
+model Puzzle {
+  id         String       @id @default(cuid())
+  gameType   GameType
+  difficulty Difficulty
+  status     PuzzleStatus @default(PUBLISHED)
+  metadata   Json?
+  createdAt  DateTime     @default(now())
+
+  sudoku    SudokuPuzzle?
+  crossword CrosswordPuzzle?
+  nonogram  NonogramPuzzle?
+  matches   Match[]
+  attempts  PuzzleAttempt[]
+
+  @@index([gameType, difficulty, status])
+}
+
+model SudokuPuzzle {
+  id              String   @id @default(cuid())
+  puzzleId        String   @unique
+  grid            String // 81-char string, '0' = empty cell
+  solution        String // 81-char string, never sent to client pre-completion
+  difficultyScore Int?
+  createdAt       DateTime @default(now())
+
+  puzzle Puzzle @relation(fields: [puzzleId], references: [id], onDelete: Cascade)
+}
+
+model CrosswordPuzzle {
+  id        String   @id @default(cuid())
+  puzzleId  String   @unique
+  title     String
+  width     Int
+  height    Int
+  grid      Json // cell layout, incl. black squares
+  clues     Json // { across: [...], down: [...] }
+  answers   Json // never sent to client pre-completion
+  author    String?
+  source    String?
+  createdAt DateTime @default(now())
+
+  puzzle Puzzle @relation(fields: [puzzleId], references: [id], onDelete: Cascade)
+}
+
+model NonogramPuzzle {
+  id           String   @id @default(cuid())
+  puzzleId     String   @unique
+  width        Int
+  height       Int
+  rowClues     Json
+  colClues     Json
+  solutionGrid Json // never sent to client pre-completion
+  createdAt    DateTime @default(now())
+
+  puzzle Puzzle @relation(fields: [puzzleId], references: [id], onDelete: Cascade)
+}
+
+model Match {
+  id           String      @id @default(cuid())
+  gameType     GameType
+  puzzleId     String
+  status       MatchStatus @default(WAITING)
+  startedAt    DateTime?
+  completedAt  DateTime?
+  winnerUserId String?
+  createdAt    DateTime    @default(now())
+
+  puzzle        Puzzle             @relation(fields: [puzzleId], references: [id])
+  winner        User?              @relation("MatchWinner", fields: [winnerUserId], references: [id])
+  participants  MatchParticipant[]
+  ratingChanges RatingChange[]
+  attempts      PuzzleAttempt[]
+
+  @@index([gameType, status])
+  @@index([puzzleId])
+}
+
+model MatchParticipant {
+  id               String            @id @default(cuid())
+  matchId          String
+  userId           String
+  startingRating   Float
+  endingRating     Float?
+  result           MatchResult?
+  completionTimeMs Int?
+  mistakes         Int               @default(0)
+  disconnectStatus DisconnectStatus  @default(CONNECTED)
+  createdAt        DateTime          @default(now())
+
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id])
+
+  @@unique([matchId, userId])
+  @@index([userId])
+}
+
+model PuzzleAttempt {
+  id         String   @id @default(cuid())
+  userId     String
+  puzzleId   String
+  matchId    String?
+  durationMs Int?
+  completed  Boolean  @default(false)
+  mistakes   Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  user   User    @relation(fields: [userId], references: [id])
+  puzzle Puzzle  @relation(fields: [puzzleId], references: [id])
+  match  Match?  @relation(fields: [matchId], references: [id])
+
+  @@index([userId, puzzleId])
+  @@index([matchId])
+}
+
+// unique(userId, matchId) is the structural guard against double rating awards
+// (CLAUDE.md non-negotiable: "a match must never award rating twice").
+model RatingChange {
+  id           String   @id @default(cuid())
+  userId       String
+  matchId      String
+  gameType     GameType
+  ratingBefore Float
+  ratingAfter  Float
+  delta        Float
+  rdBefore     Float?
+  rdAfter      Float?
+  createdAt    DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id])
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, matchId])
+  @@index([userId, gameType, createdAt])
+}
+
+// Rows are ephemeral: deleted on match-found/cancel (Phase 3 logic), so this
+// unique constraint structurally prevents a user from double-queuing for one game.
+model MatchmakingQueueEntry {
+  id       String   @id @default(cuid())
+  userId   String
+  gameType GameType
+  rating   Float
+  region   String?
+  queuedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, gameType])
+  @@index([gameType, queuedAt])
+}
