@@ -11,6 +11,10 @@ const GAME_TITLES: Record<string, string> = {
 
 const GAME_ORDER = [GameType.SUDOKU, GameType.CROSSWORD, GameType.NONOGRAM];
 
+const PRACTICE_HREFS: Partial<Record<string, string>> = {
+  [GameType.SUDOKU]: "/sudoku",
+};
+
 export default async function DashboardPage() {
   const user = await getCurrentUser();
   if (!user) {
@@ -37,6 +41,7 @@ export default async function DashboardPage() {
               gamesPlayed={rating.gamesPlayed}
               wins={rating.wins}
               losses={rating.losses}
+              practiceHref={PRACTICE_HREFS[gameType]}
             />
           );
         })}

@@ -115,7 +115,7 @@ don't have to rediscover them:
 # lint:                           npm run lint
 # typecheck:                      npm run typecheck
 # db migrate:                     npm run db:migrate    (requires `docker compose up -d` first)
-# db seed:                        npm run db:seed
+# db seed:                        npm run db:seed  (SUDOKU_PUZZLES_PER_DIFFICULTY=100 to match SPEC §14's example; default 20/difficulty, idempotent top-up)
 # db generate (Prisma client):    npm run db:generate
 # db studio (inspect data):       npm run db:studio
 ```

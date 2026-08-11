@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { RankBadge } from "@/components/RankBadge";
 
 export function GameRatingCard({
@@ -6,12 +7,14 @@ export function GameRatingCard({
   gamesPlayed,
   wins,
   losses,
+  practiceHref,
 }: {
   title: string;
   rating: number;
   gamesPlayed: number;
   wins: number;
   losses: number;
+  practiceHref?: string;
 }) {
   const winRate = gamesPlayed > 0 ? Math.round((wins / gamesPlayed) * 100) : 0;
 
@@ -46,6 +49,14 @@ export function GameRatingCard({
       >
         PLAY RANKED
       </button>
+      {practiceHref && (
+        <Link
+          href={practiceHref}
+          className="text-center text-sm font-medium hover:underline"
+        >
+          Practice solo →
+        </Link>
+      )}
     </div>
   );
 }
