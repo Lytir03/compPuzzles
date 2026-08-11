@@ -8,9 +8,7 @@ import { activeSockets } from "./state";
 
 type AppServer = Server<ClientToServerEvents, ServerToClientEvents>;
 
-// Crossword doesn't have a registered GameDefinition yet (Phase 6) — the
-// tick just skips game types with nothing registered.
-const SUPPORTED_GAME_TYPES = [GameType.SUDOKU, GameType.NONOGRAM];
+const SUPPORTED_GAME_TYPES = [GameType.SUDOKU, GameType.NONOGRAM, GameType.CROSSWORD];
 const DIFFICULTIES = [Difficulty.EASY, Difficulty.MEDIUM, Difficulty.HARD];
 
 let tickRunning = false;

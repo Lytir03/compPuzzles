@@ -186,8 +186,7 @@ async function handleSubmit(socket: AppSocket, data: { matchId: string; payload:
   if (!participant) return;
 
   const gameDefinition = getGameDefinition(match.gameType);
-  const clientPayload = await gameDefinition.getPuzzlePayload(match.puzzleId);
-  const result = gameDefinition.validateCompletion(clientPayload, data.payload);
+  const result = await gameDefinition.validateCompletion(match.puzzleId, data.payload);
 
   if (!result.correct) {
     socket.emit("error", { message: "Not quite — keep going." });

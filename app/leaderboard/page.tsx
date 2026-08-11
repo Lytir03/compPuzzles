@@ -17,6 +17,7 @@ const PODIUM = ["🥇", "🥈", "🥉"];
 const RANKED_HREFS: Partial<Record<string, string>> = {
   [GameType.SUDOKU]: "/sudoku/ranked",
   [GameType.NONOGRAM]: "/nonogram/ranked",
+  [GameType.CROSSWORD]: "/crossword/ranked",
 };
 
 function isGameType(value: string | undefined): value is GameType {

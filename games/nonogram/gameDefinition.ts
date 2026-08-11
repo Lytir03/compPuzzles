@@ -54,7 +54,8 @@ async function getPuzzlePayload(puzzleId: string): Promise<string> {
   return encodePuzzlePayload(toPayload(puzzle.nonogram));
 }
 
-function validateCompletion(clientPayload: string, submittedPayload: string) {
+async function validateCompletion(puzzleId: string, submittedPayload: string) {
+  const clientPayload = await getPuzzlePayload(puzzleId);
   return validateNonogramCompletion(decodePuzzlePayload(clientPayload), decodeGrid(submittedPayload));
 }
 

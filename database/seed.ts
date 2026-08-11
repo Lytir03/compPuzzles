@@ -1,3 +1,6 @@
+import { readdirSync, readFileSync } from "node:fs";
+import path from "node:path";
+import { parseCrosswordImport, type CrosswordImportPuzzle } from "@/games/crossword/importFormat";
 import { gridToString } from "@/games/sudoku/engine";
 import { generatePuzzle as generateSudokuPuzzle } from "@/games/sudoku/generator";
 import { generatePuzzle as generateNonogramPuzzle } from "@/games/nonogram/generator";
@@ -76,6 +79,47 @@ async function topUpNonogramPuzzles(difficulty: Difficulty) {
   }
 }
 
+// Crossword is curated content, not procedural (SPEC §16 explicitly rules
+// out a "sophisticated crossword generator") — this imports every JSON file
+// in games/crossword/content/ through the same parseCrosswordImport() a
+// future admin-upload path would use, idempotent by title so re-running
+// `npm run db:seed` never creates duplicates.
+async function importCrosswordPuzzles() {
+  const contentDir = path.join(process.cwd(), "games/crossword/content");
+  const files = readdirSync(contentDir).filter((f) => f.endsWith(".json"));
+
+  for (const file of files) {
+    const raw = JSON.parse(readFileSync(path.join(contentDir, file), "utf8")) as CrosswordImportPuzzle;
+    const parsed = parseCrosswordImport(raw);
+
+    const existing = await prisma.crosswordPuzzle.findFirst({ where: { title: parsed.title } });
+    if (existing) {
+      console.log(`Crossword "${parsed.title}": already imported, skipping.`);
+      continue;
+    }
+
+    await prisma.puzzle.create({
+      data: {
+        gameType: GameType.CROSSWORD,
+        difficulty: parsed.difficulty,
+        crossword: {
+          create: {
+            title: parsed.title,
+            width: parsed.width,
+            height: parsed.height,
+            grid: parsed.mask,
+            clues: { across: parsed.across, down: parsed.down },
+            answers: parsed.solution,
+            author: parsed.author,
+            source: parsed.source,
+          },
+        },
+      },
+    });
+    console.log(`Crossword "${parsed.title}": imported.`);
+  }
+}
+
 async function main() {
   for (const difficulty of [Difficulty.EASY, Difficulty.MEDIUM, Difficulty.HARD]) {
     await topUpSudokuPuzzles(difficulty);
@@ -83,6 +127,7 @@ async function main() {
   for (const difficulty of [Difficulty.EASY, Difficulty.MEDIUM, Difficulty.HARD]) {
     await topUpNonogramPuzzles(difficulty);
   }
+  await importCrosswordPuzzles();
 }
 
 main()

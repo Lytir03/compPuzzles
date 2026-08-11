@@ -1,0 +1,25 @@
+{
+  "title": "Warm-up #1",
+  "difficulty": "EASY",
+  "width": 5,
+  "height": 5,
+  "grid": ["...##", "...##", ".....", "##...", "##..."],
+  "clues": {
+    "across": [
+      { "number": 1, "row": 0, "col": 0, "answer": "OFF", "clue": "Not on, as a light switch" },
+      { "number": 4, "row": 1, "col": 0, "answer": "PEA", "clue": "Small green veggie in a pod" },
+      { "number": 5, "row": 2, "col": 0, "answer": "TWIST", "clue": "Unexpected turn in a story" },
+      { "number": 8, "row": 3, "col": 2, "answer": "THE", "clue": "Most common word in English" },
+      { "number": 9, "row": 4, "col": 2, "answer": "HEN", "clue": "Female chicken" }
+    ],
+    "down": [
+      { "number": 1, "row": 0, "col": 0, "answer": "OPT", "clue": "Choose (to)" },
+      { "number": 2, "row": 0, "col": 1, "answer": "FEW", "clue": "Not many" },
+      { "number": 3, "row": 0, "col": 2, "answer": "FAITH", "clue": "Strong belief or trust" },
+      { "number": 6, "row": 2, "col": 3, "answer": "SHE", "clue": "Pronoun for a girl" },
+      { "number": 7, "row": 2, "col": 4, "answer": "TEN", "clue": "Number after nine" }
+    ]
+  },
+  "author": "compPuzzles",
+  "source": "Original demo content"
+}

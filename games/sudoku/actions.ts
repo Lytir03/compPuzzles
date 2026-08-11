@@ -62,7 +62,7 @@ export async function submitPracticeSolution(
     throw new Error(`No Sudoku puzzle found for id ${puzzleId}`);
   }
 
-  const result = sudokuGameDefinition.validateCompletion(puzzle.sudoku.grid, submittedGridString);
+  const result = await sudokuGameDefinition.validateCompletion(puzzleId, submittedGridString);
 
   await prisma.puzzleAttempt.create({
     data: {

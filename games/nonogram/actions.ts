@@ -68,8 +68,7 @@ export async function submitPracticeSolution(
     throw new Error("Invalid grid payload");
   }
 
-  const puzzlePayload = await nonogramGameDefinition.getPuzzlePayload(puzzleId);
-  const result = nonogramGameDefinition.validateCompletion(puzzlePayload, submittedGridPayload);
+  const result = await nonogramGameDefinition.validateCompletion(puzzleId, submittedGridPayload);
 
   await prisma.puzzleAttempt.create({
     data: {

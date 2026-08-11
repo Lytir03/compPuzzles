@@ -45,7 +45,8 @@ async function getPuzzlePayload(puzzleId: string): Promise<string> {
   return puzzle.sudoku.grid;
 }
 
-function validateCompletion(clientPayload: string, submittedPayload: string) {
+async function validateCompletion(puzzleId: string, submittedPayload: string) {
+  const clientPayload = await getPuzzlePayload(puzzleId);
   return validateSudokuCompletion(gridFromString(clientPayload), gridFromString(submittedPayload));
 }
 

@@ -40,8 +40,16 @@ export interface GameDefinition {
   /** 0-100, for the abstract opponent-progress broadcast (SPEC §10) — never exact cells/moves. */
   calculateProgress(clientPayload: string, currentPayload: string): number;
 
-  /** Authoritative completion check. Never trusts a client "I won" message. */
-  validateCompletion(clientPayload: string, submittedPayload: string): CompletionCheck;
+  /**
+   * Authoritative completion check. Never trusts a client "I won" message.
+   * Takes `puzzleId` rather than the client payload because not every game
+   * can self-verify from what the client was given: Sudoku (uniqueness) and
+   * Nonogram (clue-derivation) can, but Crossword's black-square layout
+   * doesn't determine which words are correct — it genuinely needs the
+   * stored answer key (SPEC §10, "server validates answer grid"). Async so
+   * each implementation can fetch whatever server-only data it needs.
+   */
+  validateCompletion(puzzleId: string, submittedPayload: string): Promise<CompletionCheck>;
 
   /** Only meaningful for games with server-checkable individual moves. */
   validateMove?(clientPayload: string, move: unknown): boolean;

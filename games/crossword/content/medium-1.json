@@ -1,0 +1,25 @@
+{
+  "title": "Midweek Mini #1",
+  "difficulty": "MEDIUM",
+  "width": 5,
+  "height": 5,
+  "grid": ["##...", ".....", ".....", ".....", "...##"],
+  "clues": {
+    "across": [
+      { "number": 1, "row": 0, "col": 2, "answer": "LOW", "clue": "Not high" },
+      { "number": 4, "row": 1, "col": 0, "answer": "GLOVE", "clue": "Hand covering, one of a pair" },
+      { "number": 6, "row": 2, "col": 0, "answer": "RADAR", "clue": "System that detects objects using radio waves" },
+      { "number": 7, "row": 3, "col": 0, "answer": "ANGLE", "clue": "Space between two intersecting lines" },
+      { "number": 8, "row": 4, "col": 0, "answer": "BEE", "clue": "Buzzing pollinator" }
+    ],
+    "down": [
+      { "number": 1, "row": 0, "col": 2, "answer": "LODGE", "clue": "Rustic cabin, or to file (a complaint)" },
+      { "number": 2, "row": 0, "col": 3, "answer": "OVAL", "clue": "Egg-shaped" },
+      { "number": 3, "row": 0, "col": 4, "answer": "WERE", "clue": "Past tense of \"are\"" },
+      { "number": 4, "row": 1, "col": 0, "answer": "GRAB", "clue": "Seize suddenly" },
+      { "number": 5, "row": 1, "col": 1, "answer": "LANE", "clue": "Narrow road, or a bowling strip" }
+    ]
+  },
+  "author": "compPuzzles",
+  "source": "Original demo content"
+}

@@ -1,0 +1,25 @@
+{
+  "title": "Midweek Mini #2",
+  "difficulty": "MEDIUM",
+  "width": 5,
+  "height": 5,
+  "grid": ["##...", ".....", ".....", ".....", "...##"],
+  "clues": {
+    "across": [
+      { "number": 1, "row": 0, "col": 2, "answer": "NOT", "clue": "In no way; negation word" },
+      { "number": 4, "row": 1, "col": 0, "answer": "SHAPE", "clue": "Form or outline of something" },
+      { "number": 6, "row": 2, "col": 0, "answer": "TAKEN", "clue": "Already claimed, or captured" },
+      { "number": 7, "row": 3, "col": 0, "answer": "EVENT", "clue": "Planned occasion or happening" },
+      { "number": 8, "row": 4, "col": 0, "answer": "WED", "clue": "To marry" }
+    ],
+    "down": [
+      { "number": 1, "row": 0, "col": 2, "answer": "NAKED", "clue": "Without clothing, or \"to the ___ eye\"" },
+      { "number": 2, "row": 0, "col": 3, "answer": "OPEN", "clue": "Not closed" },
+      { "number": 3, "row": 0, "col": 4, "answer": "TENT", "clue": "Camping shelter" },
+      { "number": 4, "row": 1, "col": 0, "answer": "STEW", "clue": "Slow-cooked pot of meat and vegetables" },
+      { "number": 5, "row": 1, "col": 1, "answer": "HAVE", "clue": "Possess" }
+    ]
+  },
+  "author": "compPuzzles",
+  "source": "Original demo content"
+}

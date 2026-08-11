@@ -1,0 +1,25 @@
+{
+  "title": "Championship Grid #2",
+  "difficulty": "HARD",
+  "width": 5,
+  "height": 5,
+  "grid": ["#....", "#....", ".....", "....#", "....#"],
+  "clues": {
+    "across": [
+      { "number": 1, "row": 0, "col": 1, "answer": "CHAT", "clue": "Casual conversation" },
+      { "number": 5, "row": 1, "col": 1, "answer": "RACE", "clue": "Competition of speed" },
+      { "number": 6, "row": 2, "col": 0, "answer": "PASTA", "clue": "Italian noodles" },
+      { "number": 7, "row": 3, "col": 0, "answer": "ONTO", "clue": "On top of; aware of" },
+      { "number": 8, "row": 4, "col": 0, "answer": "PEER", "clue": "An equal, or to look closely" }
+    ],
+    "down": [
+      { "number": 1, "row": 0, "col": 1, "answer": "CRANE", "clue": "Tall construction machine, or a wading bird" },
+      { "number": 2, "row": 0, "col": 2, "answer": "HASTE", "clue": "Excessive speed; hurry" },
+      { "number": 3, "row": 0, "col": 3, "answer": "ACTOR", "clue": "Performer in a film or play" },
+      { "number": 4, "row": 0, "col": 4, "answer": "TEA", "clue": "Hot beverage, or a British afternoon meal" },
+      { "number": 6, "row": 2, "col": 0, "answer": "POP", "clue": "Soda, or a sudden burst sound" }
+    ]
+  },
+  "author": "compPuzzles",
+  "source": "Original demo content"
+}

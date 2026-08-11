@@ -1,0 +1,25 @@
+{
+  "title": "Warm-up #2",
+  "difficulty": "EASY",
+  "width": 5,
+  "height": 5,
+  "grid": ["##...", "##...", ".....", "...##", "...##"],
+  "clues": {
+    "across": [
+      { "number": 1, "row": 0, "col": 2, "answer": "ACE", "clue": "Top playing card, or an expert" },
+      { "number": 4, "row": 1, "col": 2, "answer": "LAY", "clue": "Set down flat" },
+      { "number": 5, "row": 2, "col": 0, "answer": "STARE", "clue": "Look intently without blinking" },
+      { "number": 7, "row": 3, "col": 0, "answer": "EAR", "clue": "Organ used for hearing" },
+      { "number": 8, "row": 4, "col": 0, "answer": "ARM", "clue": "Limb from shoulder to hand" }
+    ],
+    "down": [
+      { "number": 1, "row": 0, "col": 2, "answer": "ALARM", "clue": "Wake-up device" },
+      { "number": 2, "row": 0, "col": 3, "answer": "CAR", "clue": "Vehicle with four wheels" },
+      { "number": 3, "row": 0, "col": 4, "answer": "EYE", "clue": "Organ of sight" },
+      { "number": 5, "row": 2, "col": 0, "answer": "SEA", "clue": "Ocean, briefly" },
+      { "number": 6, "row": 2, "col": 1, "answer": "TAR", "clue": "Black substance used to pave roads" }
+    ]
+  },
+  "author": "compPuzzles",
+  "source": "Original demo content"
+}

@@ -1,0 +1,25 @@
+{
+  "title": "Championship Grid #1",
+  "difficulty": "HARD",
+  "width": 5,
+  "height": 5,
+  "grid": ["##...", ".....", ".....", ".....", "...##"],
+  "clues": {
+    "across": [
+      { "number": 1, "row": 0, "col": 2, "answer": "MOB", "clue": "Disorderly crowd" },
+      { "number": 4, "row": 1, "col": 0, "answer": "SLOPE", "clue": "Ski hill, or the steepness of a line" },
+      { "number": 6, "row": 2, "col": 0, "answer": "NOVEL", "clue": "Book-length work of fiction" },
+      { "number": 7, "row": 3, "col": 0, "answer": "AGENT", "clue": "Spy, or someone who represents a client" },
+      { "number": 8, "row": 4, "col": 0, "answer": "POD", "clue": "Cluster of seeds, or a group of whales" }
+    ],
+    "down": [
+      { "number": 1, "row": 0, "col": 2, "answer": "MOVED", "clue": "Relocated, or emotionally touched" },
+      { "number": 2, "row": 0, "col": 3, "answer": "OPEN", "clue": "Available, not restricted" },
+      { "number": 3, "row": 0, "col": 4, "answer": "BELT", "clue": "Waist accessory, or an assembly line" },
+      { "number": 4, "row": 1, "col": 0, "answer": "SNAP", "clue": "Sudden break, or a quick photo" },
+      { "number": 5, "row": 1, "col": 1, "answer": "LOGO", "clue": "Brand's visual symbol" }
+    ]
+  },
+  "author": "compPuzzles",
+  "source": "Original demo content"
+}
