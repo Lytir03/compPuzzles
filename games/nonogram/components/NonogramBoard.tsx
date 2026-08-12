@@ -24,6 +24,8 @@ export interface NonogramBoardProps {
   onProgress?: (grid: NonogramGrid) => void;
 }
 
+const LONG_PRESS_MS = 400;
+
 function cycleState(current: number): number {
   if (current === UNDETERMINED) return FILLED;
   if (current === FILLED) return MARKED_EMPTY;
@@ -44,8 +46,30 @@ export function NonogramBoard({
   const [elapsedMs, setElapsedMs] = useState(0);
   const startRef = useRef<number | null>(null);
   const submittedRef = useRef(false);
-  const dragRef = useRef<{ active: boolean; targetState: number } | null>(null);
+  const dragRef = useRef<{ active: boolean; targetState: number; longPressFired: boolean } | null>(
+    null,
+  );
+  const longPressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const gridRef = useRef<HTMLDivElement | null>(null);
+
+  // A pointer released outside the grid still has to end the drag, or the
+  // next hover would keep painting.
+  useEffect(() => {
+    const stop = () => {
+      if (longPressRef.current) {
+        clearTimeout(longPressRef.current);
+        longPressRef.current = null;
+      }
+      if (dragRef.current) dragRef.current.active = false;
+    };
+    window.addEventListener("pointerup", stop);
+    window.addEventListener("pointercancel", stop);
+    return () => {
+      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
+      stop();
+    };
+  }, []);
 
   const solved = useMemo(() => {
     const derived = deriveClues(grid, dims);
@@ -88,19 +112,40 @@ export function NonogramBoard({
   function handlePointerDown(index: number) {
     if (disabled) return;
     const nextState = cycleState(grid[index]);
-    dragRef.current = { active: true, targetState: nextState };
+    dragRef.current = { active: true, targetState: nextState, longPressFired: false };
     setCellState(index, nextState);
+
+    // Long-press marks ×, which the on-screen hint has always promised but
+    // nothing implemented — right-click was desktop-only, leaving touch users
+    // to cycle fill → × → empty one tap at a time.
+    clearLongPress();
+    longPressRef.current = setTimeout(() => {
+      if (!dragRef.current?.active) return;
+      dragRef.current.longPressFired = true;
+      dragRef.current.targetState = MARKED_EMPTY;
+      setCellState(index, MARKED_EMPTY);
+    }, LONG_PRESS_MS);
   }
 
   function handlePointerMove(event: React.PointerEvent) {
     if (disabled || !dragRef.current?.active) return;
+    // Any movement means this is a drag, not a long press.
+    clearLongPress();
     const el = document.elementFromPoint(event.clientX, event.clientY);
     const indexAttr = el?.getAttribute("data-cell-index");
     if (indexAttr === null || indexAttr === undefined) return;
     setCellState(Number(indexAttr), dragRef.current.targetState);
   }
 
+  function clearLongPress() {
+    if (longPressRef.current) {
+      clearTimeout(longPressRef.current);
+      longPressRef.current = null;
+    }
+  }
+
   function endDrag() {
+    clearLongPress();
     if (dragRef.current) dragRef.current.active = false;
   }
 
@@ -110,13 +155,20 @@ export function NonogramBoard({
     setCellState(index, grid[index] === MARKED_EMPTY ? UNDETERMINED : MARKED_EMPTY);
   }
 
-  const sizeTier =
+  // Viewport-relative cell size with a hard floor, so a 15×15 board doesn't
+  // collapse to 24px tap targets on a phone (well under the ~44px guideline).
+  // Below the floor the container scrolls instead of shrinking further.
+  const cellSize =
     dims.width <= 5
-      ? { width: "w-11 sm:w-14", height: "h-11 sm:h-14", text: "text-base" }
+      ? "clamp(2.75rem, 15vw, 3.5rem)"
       : dims.width <= 10
-        ? { width: "w-8 sm:w-10", height: "h-8 sm:h-10", text: "text-sm" }
-        : { width: "w-6 sm:w-7", height: "h-6 sm:h-7", text: "text-xs" };
-  const cellSizeClass = `${sizeTier.width} ${sizeTier.height} ${sizeTier.text}`;
+        ? "clamp(2.25rem, 8vw, 2.5rem)"
+        : "clamp(1.75rem, 5vw, 1.9rem)";
+  const cellTextClass = dims.width <= 5 ? "text-base" : dims.width <= 10 ? "text-sm" : "text-xs";
+  const cellStyle = { width: "var(--ng-cell)", height: "var(--ng-cell)" };
+  // Clue gutters stay pinned while a large board scrolls — otherwise the clues
+  // you're solving against scroll out of view with the grid.
+  const stickyGutter = "sticky z-10 bg-[var(--surface)]";
 
   return (
     <div className="flex w-full flex-col items-center gap-5">
@@ -127,10 +179,12 @@ export function NonogramBoard({
 
       <div
         ref={gridRef}
-        className="touch-none select-none overflow-auto rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-3 shadow-[0_4px_0_color-mix(in_srgb,var(--shadow)_10%,transparent)]"
+        // touch-none lives on the cells, not here, so a large board can still
+        // be panned by dragging the padding/gutters on a phone.
+        className="max-w-full select-none overflow-auto rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-3 shadow-[0_4px_0_color-mix(in_srgb,var(--shadow)_10%,transparent)]"
+        style={{ ["--ng-cell" as string]: cellSize }}
         onPointerMove={handlePointerMove}
         onPointerUp={endDrag}
-        onPointerLeave={endDrag}
         onPointerCancel={endDrag}
       >
         <div
@@ -140,11 +194,12 @@ export function NonogramBoard({
           }}
         >
           {/* top-left corner */}
-          <div />
+          <div className={`${stickyGutter} left-0 top-0 z-20`} />
           {colClues.map((clue, col) => (
             <div
               key={`col-${col}`}
-              className={`flex flex-col items-center justify-end gap-0.5 px-0.5 pb-1 text-[10px] font-black leading-none text-[color-mix(in_srgb,var(--foreground)_75%,transparent)] sm:text-xs ${sizeTier.width}`}
+              style={{ width: "var(--ng-cell)" }}
+              className={`${stickyGutter} top-0 flex flex-col items-center justify-end gap-0.5 px-0.5 pb-1 text-[10px] font-black leading-none text-[color-mix(in_srgb,var(--foreground)_75%,transparent)] sm:text-xs`}
             >
               {(clue.length === 0 ? [0] : clue).map((n, i) => (
                 <span key={i}>{clue.length === 0 ? "—" : n}</span>
@@ -155,7 +210,8 @@ export function NonogramBoard({
           {Array.from({ length: dims.height }, (_, row) => (
             <div key={`row-${row}`} className="contents">
               <div
-                className={`flex items-center justify-end gap-1 pr-2 text-[10px] font-black leading-none text-[color-mix(in_srgb,var(--foreground)_75%,transparent)] sm:text-xs ${sizeTier.height}`}
+                style={{ height: "var(--ng-cell)" }}
+                className={`${stickyGutter} left-0 flex items-center justify-end gap-1 pr-2 text-[10px] font-black leading-none text-[color-mix(in_srgb,var(--foreground)_75%,transparent)] sm:text-xs`}
               >
                 {rowClues[row].length === 0 ? "—" : rowClues[row].join(" ")}
               </div>
@@ -170,11 +226,12 @@ export function NonogramBoard({
                     aria-label={`Row ${row + 1}, column ${col + 1}`}
                     data-cell-index={index}
                     disabled={disabled}
+                    style={cellStyle}
                     onPointerDown={() => handlePointerDown(index)}
                     onContextMenu={(e) => handleContextMenu(e, index)}
                     className={[
-                      cellSizeClass,
-                      "flex items-center justify-center border border-[var(--line)] font-black outline-none transition-colors",
+                      cellTextClass,
+                      "flex touch-none items-center justify-center border border-[var(--line)] font-black outline-none transition-colors",
                       (row + 1) % 5 === 0 && row !== dims.height - 1 ? "border-b-2 border-b-[#353a31]" : "",
                       (col + 1) % 5 === 0 && col !== dims.width - 1 ? "border-r-2 border-r-[#353a31]" : "",
                       value === FILLED

@@ -20,6 +20,10 @@ export interface MatchResultPayload {
   /** Rounded — server-computed Glicko-2 update, never client input. */
   ratingBefore: number;
   ratingAfter: number;
+  /** Server-measured solve times; null when that player never completed. */
+  completionTimeMs: number | null;
+  opponentCompletionTimeMs: number | null;
+  opponentUsername: string;
 }
 
 export interface ClientToServerEvents {
@@ -37,8 +41,14 @@ export interface ServerToClientEvents {
   /** Sent instead of match:found when a reconnect recovers an in-progress match. */
   "match:resume": (data: MatchFoundPayload) => void;
   "match:opponentProgress": (data: { matchId: string; percent: number }) => void;
-  "match:opponentDisconnected": (data: { matchId: string }) => void;
+  "match:opponentDisconnected": (data: { matchId: string; graceMs: number }) => void;
   "match:opponentReconnected": (data: { matchId: string }) => void;
+  /**
+   * A submitted grid was checked server-side and wasn't correct. Carries the
+   * running mistake count, which is also the tie-breaker in
+   * matchmaking/determineWinner.ts when both players finish at the same time.
+   */
+  "match:rejected": (data: { matchId: string; mistakes: number }) => void;
   "match:result": (data: MatchResultPayload) => void;
   error: (data: { message: string }) => void;
 }

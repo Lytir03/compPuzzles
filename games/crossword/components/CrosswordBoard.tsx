@@ -68,6 +68,13 @@ export function CrosswordBoard({
     [activeSlot, dims],
   );
 
+  /** The clue for the slot the cursor is in — drives the mobile clue bar. */
+  const activeClue = useMemo(() => {
+    if (!activeSlot) return undefined;
+    const list = activeSlot.direction === "across" ? across : down;
+    return list.find((clue) => clue.row === activeSlot.row && clue.col === activeSlot.col);
+  }, [activeSlot, across, down]);
+
   const filled = useMemo(() => mask.filter((b) => !b).length, [mask]);
   const solved = useMemo(
     () => grid.every((cell, i) => (mask[i] ? cell === BLACK : cell !== "" && cell !== BLACK)),
@@ -134,6 +141,34 @@ export function CrosswordBoard({
     focusCell(index);
   }
 
+  function fillAndAdvance(index: number, letter: string) {
+    setLetter(index, letter);
+    const next = nextCellInSlot(index, true);
+    if (next !== null) {
+      setSelected(next);
+      focusCell(next);
+    }
+  }
+
+  /**
+   * Mobile letter entry. Gboard and friends frequently report `key` as
+   * "Unidentified" (or "Process") in keydown, so relying on onKeyDown alone —
+   * as this board originally did — left typing broken on most Android phones.
+   * The input is controlled, so the browser's own value is discarded either
+   * way; this just reads the character out of it.
+   */
+  function handleChange(event: React.ChangeEvent<HTMLInputElement>, index: number) {
+    if (disabled) return;
+    const typed = event.target.value.slice(-1);
+    if (!typed) {
+      setLetter(index, "");
+      return;
+    }
+    if (/^[a-zA-Z]$/.test(typed)) {
+      fillAndAdvance(index, typed.toUpperCase());
+    }
+  }
+
   function handleKeyDown(event: React.KeyboardEvent, index: number) {
     if (disabled) return;
     const row = Math.floor(index / width);
@@ -182,12 +217,7 @@ export function CrosswordBoard({
       default:
         if (/^[a-zA-Z]$/.test(event.key)) {
           event.preventDefault();
-          setLetter(index, event.key.toUpperCase());
-          const next = nextCellInSlot(index, true);
-          if (next !== null) {
-            setSelected(next);
-            focusCell(next);
-          }
+          fillAndAdvance(index, event.key.toUpperCase());
         }
     }
   }
@@ -215,14 +245,35 @@ export function CrosswordBoard({
         </div>
       </div>
 
+      {/* Current-clue bar: on a phone the clue lists sit below the fold, so
+          without this you'd be typing into a grid with no visible clue. */}
+      <div className="w-full max-w-xl rounded-xl border border-[var(--line)] bg-[var(--surface)] px-4 py-2.5 sm:hidden">
+        {activeClue ? (
+          <>
+            <p className="subtle-text text-[10px] font-extrabold uppercase tracking-widest">
+              {activeSlot?.direction === "down" ? "Down" : "Across"} {activeClue.number}
+            </p>
+            <p className="mt-0.5 font-bold leading-snug">{activeClue.clue}</p>
+          </>
+        ) : (
+          <p className="subtle-text text-sm font-semibold">Tap a cell to see its clue.</p>
+        )}
+      </div>
+
       <div className="flex w-full max-w-xl flex-col items-center gap-5 sm:flex-row sm:items-start sm:justify-center">
+        {/* Cells are sized from the viewport rather than fixed px: a 15-wide
+            grid at the old h-11/w-11 was ~675px and overflowed every phone. */}
         <div
-          className="grid gap-px rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-2 shadow-[0_4px_0_color-mix(in_srgb,var(--shadow)_10%,transparent)]"
-          style={{ gridTemplateColumns: `repeat(${width}, minmax(0, 1fr))` }}
+          className="grid max-w-full gap-px overflow-x-auto rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-2 shadow-[0_4px_0_color-mix(in_srgb,var(--shadow)_10%,transparent)]"
+          style={{
+            gridTemplateColumns: `repeat(${width}, minmax(0, 1fr))`,
+            width: `min(100%, calc(${width} * var(--cw-cell)))`,
+            ["--cw-cell" as string]: `clamp(2rem, ${Math.floor(88 / width)}vw, 3rem)`,
+          }}
         >
           {Array.from({ length: height * width }, (_, index) => {
             if (mask[index]) {
-              return <div key={index} className="h-11 w-11 bg-[#1c1f18] sm:h-12 sm:w-12" />;
+              return <div key={index} className="aspect-square w-full bg-[#1c1f18]" />;
             }
             const slot = slots.find((s) => s.row === Math.floor(index / width) && s.col === index % width);
             const isActive = activeCells.has(index);
@@ -243,14 +294,22 @@ export function CrosswordBoard({
                   inputMode="text"
                   maxLength={1}
                   disabled={disabled}
+                  // Android soft keyboards often don't emit a usable `key` for
+                  // onKeyDown, so letter entry also has to work through
+                  // onChange — keyboard users still go through onKeyDown for
+                  // arrows/backspace/auto-advance.
+                  autoCapitalize="characters"
+                  autoCorrect="off"
+                  autoComplete="off"
+                  spellCheck={false}
                   aria-label={`Row ${Math.floor(index / width) + 1}, column ${(index % width) + 1}`}
                   value={grid[index] === BLACK ? "" : grid[index]}
                   onFocus={() => selectCell(index)}
                   onClick={() => selectCell(index)}
                   onKeyDown={(e) => handleKeyDown(e, index)}
-                  onChange={() => {}}
+                  onChange={(e) => handleChange(e, index)}
                   className={[
-                    "h-11 w-11 border text-center text-lg font-black uppercase outline-none sm:h-12 sm:w-12",
+                    "aspect-square w-full min-w-0 border p-0 text-center text-[clamp(0.9rem,3.6vw,1.125rem)] font-black uppercase outline-none",
                     isSelected
                       ? "border-[var(--brand-strong)] bg-[var(--brand-soft)]"
                       : isActive

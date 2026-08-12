@@ -8,6 +8,14 @@ import type { ClientToServerEvents, ServerToClientEvents } from "./events";
 
 type AppServer = Server<ClientToServerEvents, ServerToClientEvents>;
 
+/** Sentinel used to roll back a finalization that lost the compare-and-set race. */
+class AlreadyFinalizedError extends Error {
+  constructor(matchId: string) {
+    super(`Match ${matchId} was already finalized`);
+    this.name = "AlreadyFinalizedError";
+  }
+}
+
 export async function buildParticipantOutcome(
   matchId: string,
   userId: string,
@@ -38,9 +46,12 @@ export async function finalizeMatch(
 ): Promise<void> {
   const match = await prisma.match.findUniqueOrThrow({
     where: { id: matchId },
-    include: { participants: true },
+    include: { participants: { include: { user: { select: { username: true } } } } },
   });
   if (match.status === MatchStatus.COMPLETED) return; // already finalized, avoid double-processing
+  if (match.participants.length !== 2) {
+    throw new Error(`Match ${matchId} has ${match.participants.length} participants, expected 2`);
+  }
 
   const winnerUserId = outcome.type === "winner" ? outcome.winnerUserId : null;
 
@@ -71,10 +82,18 @@ export async function finalizeMatch(
 
     const { a: newA, b: newB } = updateRatingsForMatch(ratingA, ratingB, ratingOutcomeFor(participantA.userId));
 
-    await tx.match.update({
-      where: { id: matchId },
+    // Compare-and-set on status, inside the transaction. The early return
+    // above reads the match *before* the transaction opens, so two concurrent
+    // finalizations (both players submitting at once, or a submit racing the
+    // disconnect grace timer) can both pass it. Only one can flip a row that
+    // is still IN_PROGRESS; the loser rolls back having written nothing.
+    const claimed = await tx.match.updateMany({
+      where: { id: matchId, status: MatchStatus.IN_PROGRESS },
       data: { status: MatchStatus.COMPLETED, completedAt: new Date(), winnerUserId },
     });
+    if (claimed.count === 0) {
+      throw new AlreadyFinalizedError(matchId);
+    }
 
     const changes = new Map<string, { before: number; after: number; delta: number }>();
 
@@ -124,12 +143,20 @@ export async function finalizeMatch(
     }
 
     return changes;
+  }).catch((error) => {
+    if (error instanceof AlreadyFinalizedError) return null;
+    throw error;
   });
+
+  // Another call finalized this match first and has already notified both
+  // clients — emitting a second result would double-animate the rating change.
+  if (!ratingChanges) return;
 
   for (const participant of match.participants) {
     const socket = activeSockets.get(participant.userId);
     if (!socket) continue;
     const change = ratingChanges.get(participant.userId)!;
+    const opponent = match.participants.find((p) => p.userId !== participant.userId)!;
     socket.emit("match:result", {
       matchId,
       outcome:
@@ -137,6 +164,9 @@ export async function finalizeMatch(
       reason: outcome.type === "draw" ? "draw" : outcome.reason,
       ratingBefore: Math.round(change.before),
       ratingAfter: Math.round(change.after),
+      completionTimeMs: participant.completionTimeMs,
+      opponentCompletionTimeMs: opponent.completionTimeMs,
+      opponentUsername: opponent.user.username,
     });
     socket.leave(matchId);
   }

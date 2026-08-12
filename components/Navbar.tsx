@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { getCurrentUser } from "@/auth/currentUser";
 import { logout } from "@/auth/logout";
+import { MobileNav } from "@/components/MobileNav";
+import { SubmitButton } from "@/components/SubmitButton";
 
 export async function Navbar() {
   const user = await getCurrentUser();
@@ -22,25 +24,35 @@ export async function Navbar() {
         <div className="flex items-center gap-1 sm:gap-2">
           {user ? (
             <>
-              <Link href="/dashboard" className="nav-link px-3 py-2 text-sm font-bold">
-                <span className="sm:hidden">Play</span>
-                <span className="hidden sm:inline">Game lobby</span>
+              <Link href="/dashboard" className="nav-link hidden px-3 py-2 text-sm font-bold md:block">
+                Game lobby
               </Link>
-              <Link href="/leaderboard" className="nav-link hidden px-3 py-2 text-sm font-bold min-[460px]:block">
+              <Link href="/leaderboard" className="nav-link hidden px-3 py-2 text-sm font-bold md:block">
                 Leaderboard
               </Link>
-              <span className="ml-1 hidden items-center gap-2 rounded-xl bg-[var(--surface-muted)] px-2.5 py-1.5 text-sm font-bold sm:flex">
+              <Link href="/matches" className="nav-link hidden px-3 py-2 text-sm font-bold md:block">
+                History
+              </Link>
+              {/* The username chip is the profile entry point — it used to be
+                  inert text, leaving the profile page unreachable from the nav. */}
+              <Link
+                href={`/profile/${encodeURIComponent(user.username)}`}
+                className="ml-1 flex items-center gap-2 rounded-xl bg-[var(--surface-muted)] px-2 py-1.5 text-sm font-bold transition hover:bg-[var(--brand-soft)] sm:px-2.5"
+              >
                 <span className="grid h-6 w-6 place-items-center rounded-lg bg-[var(--gold)] text-xs text-[#513b09]">
                   {user.username.slice(0, 1).toUpperCase()}
                 </span>
-                <span className="max-w-28 truncate">{user.username}</span>
-              </span>
-              <form action={logout}>
-                <button type="submit" className="nav-link px-3 py-2 text-sm font-bold">
-                  <span className="hidden sm:inline">Sign out</span>
-                  <span className="sm:hidden" aria-label="Sign out">↗</span>
-                </button>
+                <span className="hidden max-w-28 truncate sm:inline">{user.username}</span>
+              </Link>
+              <form action={logout} className="hidden md:block">
+                <SubmitButton
+                  pendingLabel=""
+                  className="nav-link px-3 py-2 text-sm font-bold disabled:opacity-50"
+                >
+                  Sign out
+                </SubmitButton>
               </form>
+              <MobileNav username={user.username} />
             </>
           ) : (
             <Link href="/sign-in" className="game-button rounded-xl px-4 py-2 text-sm font-black">

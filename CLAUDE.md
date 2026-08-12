@@ -53,6 +53,14 @@ per-game ratings, matchmaking, leaderboards, and match history. Full detail:
   back in through this same seam (those four files) once there's an actual
   reason to deploy somewhere other than localhost — don't let this stand-in
   quietly become permanent.
+  The cookie and the socket handshake token are **HMAC-signed and expiring**
+  (`lib/signedToken.ts`, keyed by `AUTH_SECRET`; a public dev fallback is used
+  locally, and startup refuses to run without a real one in production). That
+  isn't cosmetic: they used to be bare userIds, and userIds aren't secret, so
+  anyone holding one could connect to the realtime server as that player, kick
+  them out of a live match, and take their rating. Don't "simplify" either
+  back to a raw id — signing is what stops impersonation, even though the
+  login itself is still passwordless.
 - Realtime: **Socket.IO** — automatic reconnection (needed for the disconnect
   grace-period requirement) and room support (one room per match) without
   hand-rolling either. It's a separate process from Next.js (port 4000 vs.
@@ -121,6 +129,28 @@ Never trust client-side win calculation. Validate all API inputs. Rate-limit
 sensitive endpoints (matchmaking, match completion). Prevent clients from
 writing ratings directly. Protect websocket events the same as HTTP endpoints.
 
+How that's implemented (Phase 7) — extend these rather than reinventing:
+
+- **Socket payloads** are parsed by `realtime/validation.ts` before touching
+  Prisma or any game decoder, and every handler is wrapped by `guard()` in
+  `realtime/server.ts`. Both matter: the handlers are floating promises, and
+  a game's `decodeGrid` is a bare `JSON.parse`, so one malformed message used
+  to crash the whole realtime process for every player in every live match.
+  A new client→server event needs a parser and a `guard()` wrapper — no
+  exceptions.
+- **Server actions** are a public HTTP endpoint too. Use the helpers in
+  `lib/actionGuards.ts` (`assertDifficulty`, `assertPuzzleId`,
+  `assertDurationMs`, `enforceRateLimit`) — don't trust an argument because a
+  typed component happens to call it.
+- **Rate limits** live in `lib/rateLimit.ts` (in-memory token bucket, one
+  rule table for sockets and one for actions). Process-local, matching
+  `realtime/state.ts`; that's the seam to swap for Redis if this ever runs
+  multi-instance.
+- **Match finalization** claims the match with a compare-and-set on status
+  *inside* the transaction (`realtime/matchLifecycle.ts`); the pre-transaction
+  status read alone can't stop two concurrent finalizations. The
+  `@@unique([userId, matchId])` on `RatingChange` is the DB-level backstop.
+
 ## Commands
 
 Fill these in once the project is scaffolded (Phase 1) so future sessions
@@ -133,7 +163,8 @@ don't have to rediscover them:
 # lint:                           npm run lint
 # typecheck:                      npm run typecheck
 # db migrate:                     npm run db:migrate    (requires `docker compose up -d` first)
-# db seed:                        npm run db:seed  (SUDOKU_PUZZLES_PER_DIFFICULTY=100 / NONOGRAM_PUZZLES_PER_DIFFICULTY=100 to scale up; default 20/difficulty each, idempotent top-up)
+# db seed:                        npm run db:seed  (SUDOKU_PUZZLES_PER_DIFFICULTY=100 / NONOGRAM_PUZZLES_PER_DIFFICULTY=100 to scale up; default 20/difficulty each, idempotent top-up; also creates the `demo_one` /
+#                                 `demo_two` accounts for two-player testing)
 # db generate (Prisma client):    npm run db:generate
 # db studio (inspect data):       npm run db:studio
 ```

@@ -1,4 +1,5 @@
 import { loginWithUsername } from "@/auth/login";
+import { SubmitButton } from "@/components/SubmitButton";
 
 export default async function SignInPage(props: PageProps<"/sign-in">) {
   const { error } = await props.searchParams;
@@ -51,15 +52,17 @@ export default async function SignInPage(props: PageProps<"/sign-in">) {
           />
           {error && (
             <p className="rounded-xl bg-red-500/10 px-3 py-2 text-sm font-semibold text-red-600">
-              Use 3–20 letters, numbers, dashes, or underscores.
+              {error === "rate-limited"
+                ? "Too many sign-in attempts for that name. Wait a moment and try again."
+                : "Use 3–20 letters, numbers, dashes, or underscores."}
             </p>
           )}
-          <button
-            type="submit"
-            className="game-button mt-2 rounded-xl px-4 py-3.5 text-base font-black"
+          <SubmitButton
+            pendingLabel="Entering…"
+            className="game-button mt-2 rounded-xl px-4 py-3.5 text-base font-black disabled:cursor-wait disabled:opacity-70"
           >
             Enter the lobby →
-          </button>
+          </SubmitButton>
         </form>
       </section>
     </main>

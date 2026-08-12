@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { prisma } from "@/database/client";
 import { GameType } from "@/database/generated/client/enums";
+import { actionRateLimiter } from "@/lib/rateLimit";
 import {
   INITIAL_RATING,
   INITIAL_RATING_DEVIATION,
@@ -23,6 +24,14 @@ export async function loginWithUsername(formData: FormData) {
   const username = String(formData.get("username") ?? "").trim();
   if (!USERNAME_PATTERN.test(username)) {
     redirect("/sign-in?error=invalid-username");
+  }
+
+  // Unlimited calls here mean unlimited users, each with 3 rating rows. Keyed
+  // by username rather than by caller because there is no caller identity yet
+  // — this is a passwordless upsert, so the username is all there is.
+  const decision = actionRateLimiter.check("login", username.toLowerCase());
+  if (!decision.allowed) {
+    redirect("/sign-in?error=rate-limited");
   }
 
   const user = await prisma.user.upsert({

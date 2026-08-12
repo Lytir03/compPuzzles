@@ -4,6 +4,12 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/auth/currentUser";
 import { prisma } from "@/database/client";
 import { Difficulty, GameType } from "@/database/generated/client/enums";
+import {
+  assertDifficulty,
+  assertDurationMs,
+  assertPuzzleId,
+  enforceRateLimit,
+} from "@/lib/actionGuards";
 import { CELL_COUNT } from "./engine";
 import { sudokuGameDefinition } from "./gameDefinition";
 
@@ -23,8 +29,9 @@ export interface PracticePuzzle {
 export async function startPracticePuzzle(difficulty: Difficulty): Promise<PracticePuzzle> {
   const user = await getCurrentUser();
   if (!user) redirect("/sign-in");
+  enforceRateLimit("practice:start", user.id);
 
-  const assignment = await sudokuGameDefinition.createMatch(difficulty, [user.id]);
+  const assignment = await sudokuGameDefinition.createMatch(assertDifficulty(difficulty), [user.id]);
   return { puzzleId: assignment.puzzleId, grid: assignment.clientPayload };
 }
 
@@ -46,16 +53,18 @@ export async function submitPracticeSolution(
 ): Promise<SubmitResult> {
   const user = await getCurrentUser();
   if (!user) redirect("/sign-in");
+  // Each call is a puzzle fetch plus a full validation, and would otherwise be
+  // an unmetered correctness oracle — including against a puzzle the caller is
+  // currently playing in a ranked match.
+  enforceRateLimit("practice:submit", user.id);
 
-  if (!GRID_STRING_PATTERN.test(submittedGridString)) {
+  if (typeof submittedGridString !== "string" || !GRID_STRING_PATTERN.test(submittedGridString)) {
     throw new Error(`Expected an ${CELL_COUNT}-digit grid string`);
   }
-  if (!Number.isFinite(durationMs) || durationMs < 0) {
-    throw new Error("Invalid duration");
-  }
+  const duration = assertDurationMs(durationMs);
 
   const puzzle = await prisma.puzzle.findUnique({
-    where: { id: puzzleId },
+    where: { id: assertPuzzleId(puzzleId) },
     include: { sudoku: true },
   });
   if (!puzzle?.sudoku || puzzle.gameType !== GameType.SUDOKU) {
@@ -68,7 +77,7 @@ export async function submitPracticeSolution(
     data: {
       userId: user.id,
       puzzleId,
-      durationMs: Math.round(durationMs),
+      durationMs: duration,
       completed: result.correct,
     },
   });

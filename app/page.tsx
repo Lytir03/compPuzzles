@@ -4,8 +4,16 @@ import { getCurrentUser } from "@/auth/currentUser";
 
 const VALUE_PROPS = [
   { icon: "⚡", title: "Fast matchmaking", copy: "Jump into a fair 1v1 puzzle race." },
+  { icon: "🧩", title: "Three puzzle games", copy: "Sudoku, Mini Crosswords and Nonograms." },
   { icon: "◆", title: "Your own rating", copy: "Climb a separate ladder for every game." },
   { icon: "🏆", title: "Global ranks", copy: "Win consistently and chase the top spot." },
+];
+
+const VALUE_PROP_TONES = [
+  "bg-[var(--gold)]",
+  "bg-[var(--coral)]",
+  "bg-[#8ecb61]",
+  "bg-[#6fa9df]",
 ];
 
 const HERO_PUZZLE =
@@ -31,8 +39,8 @@ export default async function LandingPage() {
             <span className="text-[var(--brand-strong)]">Outsolve everyone.</span>
           </h1>
           <p className="subtle-text mt-6 max-w-xl text-lg font-medium leading-8 sm:text-xl">
-            Race real players in Sudoku, climb your rating, and turn every quiet puzzle into a
-            proper competition.
+            Race real players in Sudoku, Mini Crosswords and Nonograms, climb a rating in each, and
+            turn every quiet puzzle into a proper competition.
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <Link
@@ -122,19 +130,15 @@ export default async function LandingPage() {
             <h2 className="mt-2 text-2xl font-black tracking-tight sm:text-3xl">One more game is always tempting.</h2>
           </div>
           <span className="hidden rounded-full bg-[var(--surface-muted)] px-3 py-1.5 text-xs font-bold sm:block">
-            Sudoku live now · More games coming
+            Sudoku · Crosswords · Nonograms — all live
           </span>
         </div>
-        <ul className="grid gap-4 md:grid-cols-3">
+        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {VALUE_PROPS.map((prop, index) => (
             <li key={prop.title} className="game-panel rounded-2xl p-5">
               <span
                 className={`grid h-11 w-11 place-items-center rounded-xl text-lg shadow-[0_3px_0_rgba(0,0,0,.16)] ${
-                  index === 0
-                    ? "bg-[var(--gold)]"
-                    : index === 1
-                      ? "bg-[#8ecb61]"
-                      : "bg-[#6fa9df]"
+                  VALUE_PROP_TONES[index % VALUE_PROP_TONES.length]
                 }`}
               >
                 {prop.icon}

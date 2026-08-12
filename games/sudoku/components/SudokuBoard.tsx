@@ -88,7 +88,9 @@ export function SudokuBoard({
       if (given[candidate] === EMPTY) break;
     }
     setSelected(candidate);
-    document.getElementById(cellDomId(candidate))?.focus();
+    // preventScroll: mobile Safari otherwise scroll-jumps (and sometimes zooms)
+    // the board on every arrow step.
+    document.getElementById(cellDomId(candidate))?.focus({ preventScroll: true });
   }
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLButtonElement>, index: number) {
@@ -114,10 +116,14 @@ export function SudokuBoard({
         <span className="font-mono text-base font-black tabular-nums">{formatElapsed(elapsedMs)}</span>
       </div>
 
+      {/* 9 columns can't reach the 44px tap-target guideline on a 375px phone,
+          so the grid claims as much width as it can and the sticky number pad
+          below (which is 44px+) does the actual value entry — a cell tap only
+          has to select. */}
       <div
         role="grid"
         aria-label="Sudoku board"
-        className="grid w-[min(92vw,29rem)] grid-cols-9 overflow-hidden rounded-2xl border-[3px] border-[#353a31] bg-[#353a31] shadow-[0_8px_0_#242820,0_18px_35px_rgba(30,35,26,.18)]"
+        className="grid w-[min(96vw,29rem)] grid-cols-9 overflow-hidden rounded-2xl border-[3px] border-[#353a31] bg-[#353a31] shadow-[0_8px_0_#242820,0_18px_35px_rgba(30,35,26,.18)]"
       >
         {grid.map((value, index) => {
           const isGiven = given[index] !== EMPTY;
@@ -170,35 +176,41 @@ export function SudokuBoard({
         })}
       </div>
 
-      <div className="grid w-[min(92vw,34rem)] grid-cols-5 gap-2 sm:grid-cols-10">
-        {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((digit) => (
-          <button
-            key={digit}
-            type="button"
-            disabled={disabled || selected === null || given[selected] !== EMPTY}
-            onClick={() => selected !== null && setCellValue(selected, digit)}
-            className={`soft-button h-12 rounded-xl text-lg font-black disabled:cursor-not-allowed disabled:opacity-35 ${
-              selected !== null && grid[selected] === digit
-                ? "border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand-strong)]"
-                : ""
-            }`}
-          >
-            {digit}
-          </button>
-        ))}
-        <button
-          type="button"
-          aria-label="Clear cell"
-          disabled={disabled || selected === null || given[selected] !== EMPTY}
-          onClick={() => selected !== null && setCellValue(selected, EMPTY)}
-          className="soft-button h-12 rounded-xl text-sm font-black text-[var(--coral)] disabled:cursor-not-allowed disabled:opacity-35"
-        >
-          Clear
-        </button>
-      </div>
       <p className="subtle-text text-center text-xs font-semibold">
         Tap a square, then a number · Arrow keys work too
       </p>
+
+      {/* Sticky on phones: with the timer, board and opponent-progress bar
+          stacked above it, a static pad sat below the fold mid-match and every
+          entry cost a scroll. */}
+      <div className="sticky bottom-0 z-20 -mx-4 w-[calc(100%+2rem)] border-t border-[var(--line)] bg-[color-mix(in_srgb,var(--background)_92%,transparent)] px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-md sm:static sm:mx-0 sm:w-auto sm:border-0 sm:bg-transparent sm:p-0 sm:backdrop-blur-none">
+        <div className="mx-auto grid w-[min(96vw,34rem)] grid-cols-5 gap-2 sm:grid-cols-10">
+          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((digit) => (
+            <button
+              key={digit}
+              type="button"
+              disabled={disabled || selected === null || given[selected] !== EMPTY}
+              onClick={() => selected !== null && setCellValue(selected, digit)}
+              className={`soft-button h-12 min-h-11 rounded-xl text-lg font-black disabled:cursor-not-allowed disabled:opacity-35 ${
+                selected !== null && grid[selected] === digit
+                  ? "border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand-strong)]"
+                  : ""
+              }`}
+            >
+              {digit}
+            </button>
+          ))}
+          <button
+            type="button"
+            aria-label="Clear cell"
+            disabled={disabled || selected === null || given[selected] !== EMPTY}
+            onClick={() => selected !== null && setCellValue(selected, EMPTY)}
+            className="soft-button h-12 min-h-11 rounded-xl text-sm font-black text-[var(--coral)] disabled:cursor-not-allowed disabled:opacity-35"
+          >
+            Clear
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

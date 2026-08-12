@@ -4,6 +4,11 @@ import { parseCrosswordImport, type CrosswordImportPuzzle } from "@/games/crossw
 import { gridToString } from "@/games/sudoku/engine";
 import { generatePuzzle as generateSudokuPuzzle } from "@/games/sudoku/generator";
 import { generatePuzzle as generateNonogramPuzzle } from "@/games/nonogram/generator";
+import {
+  INITIAL_RATING,
+  INITIAL_RATING_DEVIATION,
+  INITIAL_VOLATILITY,
+} from "@/rating/constants";
 import { prisma } from "./client";
 import { Difficulty, GameType, PuzzleStatus } from "./generated/client/enums";
 
@@ -120,7 +125,45 @@ async function importCrosswordPuzzles() {
   }
 }
 
+/**
+ * Two demo accounts so a two-player match can be tested immediately (SPEC §24
+ * lists "seed users" as a dev tool). Sign in as each in two separate browser
+ * profiles — the session is an httpOnly cookie, so two tabs in one profile
+ * share an identity and can't play each other.
+ *
+ * Rating rows are created here too: matchmaking and finalizeMatch both look
+ * them up with findUnique/findUniqueOrThrow, so a user without them can't queue.
+ */
+const DEMO_USERNAMES = ["demo_one", "demo_two"];
+
+async function seedDemoUsers() {
+  for (const username of DEMO_USERNAMES) {
+    const user = await prisma.user.upsert({
+      where: { username },
+      update: {},
+      create: { username },
+    });
+
+    for (const gameType of [GameType.SUDOKU, GameType.CROSSWORD, GameType.NONOGRAM]) {
+      await prisma.playerGameRating.upsert({
+        where: { userId_gameType: { userId: user.id, gameType } },
+        update: {},
+        create: {
+          userId: user.id,
+          gameType,
+          rating: INITIAL_RATING,
+          ratingDeviation: INITIAL_RATING_DEVIATION,
+          volatility: INITIAL_VOLATILITY,
+          peakRating: INITIAL_RATING,
+        },
+      });
+    }
+    console.log(`Demo user "${username}": ready.`);
+  }
+}
+
 async function main() {
+  await seedDemoUsers();
   for (const difficulty of [Difficulty.EASY, Difficulty.MEDIUM, Difficulty.HARD]) {
     await topUpSudokuPuzzles(difficulty);
   }

@@ -4,6 +4,12 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/auth/currentUser";
 import { prisma } from "@/database/client";
 import { Difficulty, GameType } from "@/database/generated/client/enums";
+import {
+  assertDifficulty,
+  assertDurationMs,
+  assertPuzzleId,
+  enforceRateLimit,
+} from "@/lib/actionGuards";
 import { decodeGrid, isValidGrid } from "./engine";
 import { crosswordGameDefinition } from "./gameDefinition";
 
@@ -22,8 +28,9 @@ export interface PracticePuzzle {
 export async function startPracticePuzzle(difficulty: Difficulty): Promise<PracticePuzzle> {
   const user = await getCurrentUser();
   if (!user) redirect("/sign-in");
+  enforceRateLimit("practice:start", user.id);
 
-  const assignment = await crosswordGameDefinition.createMatch(difficulty, [user.id]);
+  const assignment = await crosswordGameDefinition.createMatch(assertDifficulty(difficulty), [user.id]);
   return { puzzleId: assignment.puzzleId, payload: assignment.clientPayload };
 }
 
@@ -46,13 +53,18 @@ export async function submitPracticeSolution(
 ): Promise<SubmitResult> {
   const user = await getCurrentUser();
   if (!user) redirect("/sign-in");
+  // Each call is a puzzle fetch plus a full validation against the stored
+  // answer key, and would otherwise be an unmetered correctness oracle —
+  // including against a puzzle the caller is currently playing in a ranked match.
+  enforceRateLimit("practice:submit", user.id);
 
-  if (!Number.isFinite(durationMs) || durationMs < 0) {
-    throw new Error("Invalid duration");
+  const duration = assertDurationMs(durationMs);
+  if (typeof submittedGridPayload !== "string") {
+    throw new Error("Malformed grid payload");
   }
 
   const puzzle = await prisma.puzzle.findUnique({
-    where: { id: puzzleId },
+    where: { id: assertPuzzleId(puzzleId) },
     include: { crossword: true },
   });
   if (!puzzle?.crossword || puzzle.gameType !== GameType.CROSSWORD) {
@@ -76,7 +88,7 @@ export async function submitPracticeSolution(
     data: {
       userId: user.id,
       puzzleId,
-      durationMs: Math.round(durationMs),
+      durationMs: duration,
       completed: result.correct,
     },
   });

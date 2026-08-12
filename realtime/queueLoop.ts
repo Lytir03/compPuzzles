@@ -11,6 +11,9 @@ type AppServer = Server<ClientToServerEvents, ServerToClientEvents>;
 const SUPPORTED_GAME_TYPES = [GameType.SUDOKU, GameType.NONOGRAM, GameType.CROSSWORD];
 const DIFFICULTIES = [Difficulty.EASY, Difficulty.MEDIUM, Difficulty.HARD];
 
+/** "Match found" → boards go live. Both clients count down to the same server instant. */
+const COUNTDOWN_MS = 3000;
+
 let tickRunning = false;
 
 /**
@@ -72,6 +75,13 @@ async function createMatchFromPair(
     }),
   ]);
 
+  // Both clients count down to this instant before their boards go live, so
+  // it — not "now" — is the match's real start. Storing it as startedAt keeps
+  // server-measured completion times equal to the timer players actually see
+  // (they were previously inflated by the whole countdown), and makes the
+  // reconnect-resume path in server.ts replay a consistent startsAt.
+  const startsAt = Date.now() + COUNTDOWN_MS;
+
   const match = await prisma.$transaction(async (tx) => {
     // Both entries might already be gone if this pairing lost a race with
     // another one this same tick (e.g. a 3-way mutual-candidate overlap) —
@@ -88,7 +98,7 @@ async function createMatchFromPair(
         gameType,
         difficulty,
         status: MatchStatus.IN_PROGRESS,
-        startedAt: new Date(),
+        startedAt: new Date(startsAt),
         puzzleId: assignment.puzzleId,
         participants: {
           create: [
@@ -105,7 +115,6 @@ async function createMatchFromPair(
 
   if (!match) return;
 
-  const startsAt = Date.now() + 3000;
   const [userA, userB] = await Promise.all([
     prisma.user.findUniqueOrThrow({ where: { id: userIdA } }),
     prisma.user.findUniqueOrThrow({ where: { id: userIdB } }),

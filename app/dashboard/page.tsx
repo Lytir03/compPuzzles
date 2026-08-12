@@ -1,14 +1,12 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/auth/currentUser";
 import { GameRatingCard } from "@/components/GameRatingCard";
-import { prisma } from "@/database/client";
-import { GameType, MatchStatus } from "@/database/generated/client/enums";
-
-const GAME_TITLES: Record<string, string> = {
-  [GameType.SUDOKU]: "Sudoku",
-  [GameType.CROSSWORD]: "Crosswords",
-  [GameType.NONOGRAM]: "Nonograms",
-};
+import { LeaderboardPreview } from "@/components/LeaderboardPreview";
+import { GAME_TITLES, MatchHistoryList } from "@/components/MatchHistoryList";
+import { GameType } from "@/database/generated/client/enums";
+import { fetchStandings } from "@/database/leaderboard";
+import { fetchMatchHistory } from "@/database/matchHistory";
 
 const GAME_ORDER = [GameType.SUDOKU, GameType.CROSSWORD, GameType.NONOGRAM];
 
@@ -32,14 +30,17 @@ export default async function DashboardPage() {
 
   const ratingByGame = new Map(user.ratings.map((r) => [r.gameType, r]));
 
-  const recentMatches = await prisma.matchParticipant.findMany({
-    where: { userId: user.id, match: { status: MatchStatus.COMPLETED } },
-    orderBy: { match: { completedAt: "desc" } },
-    take: 5,
-    include: {
-      match: { include: { participants: { include: { user: true } } } },
-    },
-  });
+  // Preview the ladder the player actually plays; a Nonogram regular shouldn't
+  // land on a Sudoku board they've never entered.
+  const mostPlayed = user.ratings
+    .filter((r) => GAME_ORDER.includes(r.gameType) && r.gamesPlayed > 0)
+    .sort((a, b) => b.gamesPlayed - a.gamesPlayed)[0];
+  const previewGame = mostPlayed?.gameType ?? GameType.SUDOKU;
+
+  const [recentMatches, standings] = await Promise.all([
+    fetchMatchHistory(user.id, { take: 5 }),
+    fetchStandings(previewGame, { take: 5 }),
+  ]);
 
   return (
     <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6 sm:py-12">
@@ -92,72 +93,22 @@ export default async function DashboardPage() {
         })}
       </div>
 
-      <section className="mt-12 pb-8">
+      <section className="mt-12">
         <div className="flex items-center justify-between gap-4">
           <div>
             <p className="eyebrow">Your form</p>
             <h2 className="mt-1 text-2xl font-black tracking-tight">Recent matches</h2>
           </div>
-          <a href="/leaderboard" className="nav-link px-3 py-2 text-sm font-bold">
-            View leaderboard →
-          </a>
+          <Link href="/matches" className="nav-link px-3 py-2 text-sm font-bold">
+            Full history →
+          </Link>
         </div>
-        {recentMatches.length === 0 ? (
-          <div className="game-panel mt-5 flex flex-col items-center rounded-2xl px-6 py-10 text-center">
-            <span className="grid h-12 w-12 place-items-center rounded-2xl bg-[var(--brand-soft)] text-xl">🏁</span>
-            <p className="mt-3 font-black">Your match history starts here</p>
-            <p className="subtle-text mt-1 text-sm font-medium">Finish a ranked game and your result will appear here.</p>
-          </div>
-        ) : (
-          <ul className="game-panel mt-5 flex flex-col overflow-hidden rounded-2xl">
-            {recentMatches.map((participant) => {
-              const opponent = participant.match.participants.find((p) => p.userId !== user.id);
-              const delta =
-                participant.endingRating !== null
-                  ? Math.round(participant.endingRating - participant.startingRating)
-                  : null;
-              return (
-                <li
-                  key={participant.id}
-                  className="flex items-center justify-between gap-4 border-b border-[var(--line)] px-4 py-3.5 text-sm last:border-b-0 sm:px-5"
-                >
-                  <span className="flex min-w-0 items-center gap-3">
-                    <span
-                      className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl text-sm font-black ${
-                        participant.result === "WIN"
-                          ? "bg-[var(--brand-soft)] text-[var(--brand-strong)]"
-                          : participant.result === "LOSS"
-                            ? "bg-red-500/10 text-red-600"
-                            : "bg-[var(--surface-muted)]"
-                      }`}
-                    >
-                      {participant.result === "WIN" ? "W" : participant.result === "LOSS" ? "L" : "D"}
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block truncate font-black">vs {opponent?.user.username ?? "?"}</span>
-                      <span className="subtle-text text-xs font-semibold">
-                        {GAME_TITLES[participant.match.gameType]}
-                      </span>
-                    </span>
-                  </span>
-                  {delta !== null && (
-                    <span
-                      className={`rounded-lg px-2.5 py-1 font-black tabular-nums ${
-                        delta >= 0
-                          ? "bg-[var(--brand-soft)] text-[var(--brand-strong)]"
-                          : "bg-red-500/10 text-red-600"
-                      }`}
-                    >
-                      {delta >= 0 ? "+" : ""}
-                      {delta}
-                    </span>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        )}
+        <MatchHistoryList rows={recentMatches} linkToDetail />
       </section>
+
+      <div className="pb-8">
+        <LeaderboardPreview gameType={previewGame} rows={standings} viewerId={user.id} />
+      </div>
     </main>
   );
 }
