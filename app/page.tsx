@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/auth/currentUser";
 
 const VALUE_PROPS = [
   { icon: "⚡", title: "Fast matchmaking", copy: "Jump into a fair 1v1 puzzle race." },
-  { icon: "🧩", title: "Three puzzle games", copy: "Sudoku, Mini Crosswords and Nonograms." },
+  { icon: "🧩", title: "Three puzzle games", copy: "Sudoku, no-guess Minesweeper and Nonograms." },
   { icon: "◆", title: "Your own rating", copy: "Climb a separate ladder for every game." },
   { icon: "🏆", title: "Global ranks", copy: "Win consistently and chase the top spot." },
 ];
@@ -29,18 +29,18 @@ export default async function LandingPage() {
     <main className="flex-1 overflow-hidden">
       <section className="mx-auto grid max-w-6xl items-center gap-12 px-6 py-14 lg:grid-cols-[1fr_0.88fr] lg:py-20">
         <div>
-          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-[color-mix(in_srgb,var(--brand)_38%,var(--line))] bg-[var(--brand-soft)] px-3 py-1.5 text-sm font-extrabold text-[var(--brand-strong)]">
+          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-[color-mix(in_srgb,var(--brand)_38%,var(--line))] bg-[var(--brand-soft)] px-3 py-1.5 text-sm font-extrabold text-[var(--brand-text)]">
             <span className="h-2 w-2 rounded-full bg-[var(--brand)] shadow-[0_0_0_4px_color-mix(in_srgb,var(--brand)_20%,transparent)]" />
             Live puzzle battles
           </div>
           <h1 className="max-w-3xl text-5xl font-black leading-[0.98] tracking-[-0.055em] sm:text-6xl lg:text-7xl">
             Think fast.
             <br />
-            <span className="text-[var(--brand-strong)]">Outsolve everyone.</span>
+            <span className="text-[var(--brand-text)]">Outsolve everyone.</span>
           </h1>
           <p className="subtle-text mt-6 max-w-xl text-lg font-medium leading-8 sm:text-xl">
-            Race real players in Sudoku, Mini Crosswords and Nonograms, climb a rating in each, and
-            turn every quiet puzzle into a proper competition.
+            Race real players in Sudoku and Nonograms, sharpen your logic in no-guess Minesweeper,
+            and turn every quiet puzzle into a proper competition.
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <Link
@@ -130,7 +130,7 @@ export default async function LandingPage() {
             <h2 className="mt-2 text-2xl font-black tracking-tight sm:text-3xl">One more game is always tempting.</h2>
           </div>
           <span className="hidden rounded-full bg-[var(--surface-muted)] px-3 py-1.5 text-xs font-bold sm:block">
-            Sudoku · Crosswords · Nonograms — all live
+            Sudoku · Minesweeper · Nonograms
           </span>
         </div>
         <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { Difficulty } from "@/database/generated/client/enums";
 import { deriveClues } from "./engine";
-import { DIFFICULTY_DIMENSIONS, generatePuzzle } from "./generator";
+import {
+  DIFFICULTY_DIMENSIONS,
+  SUPPORTED_NONOGRAM_DIFFICULTIES,
+  generatePuzzle,
+} from "./generator";
+import { solveNonogramLogically } from "./solver";
 import { validateCompletion } from "./validator";
 
-describe.each([Difficulty.EASY, Difficulty.MEDIUM, Difficulty.HARD])(
+describe.each(SUPPORTED_NONOGRAM_DIFFICULTIES)(
   "generatePuzzle(%s)",
   (difficulty) => {
     it("produces a grid matching the expected board size", () => {
@@ -32,5 +37,27 @@ describe.each([Difficulty.EASY, Difficulty.MEDIUM, Difficulty.HARD])(
       expect(filledCount).toBeGreaterThan(0);
       expect(filledCount).toBeLessThan(solution.length);
     });
+
+    it("can be completed using forced deductions without guessing", () => {
+      const puzzle = generatePuzzle(difficulty);
+      const result = solveNonogramLogically({
+        ...puzzle.dims,
+        rowClues: puzzle.rowClues,
+        colClues: puzzle.colClues,
+      });
+
+      expect(result.status).toBe("solved");
+      expect(result.grid).toEqual(
+        puzzle.solution.map((cell) => (cell === 1 ? 1 : 2)),
+      );
+    });
   },
 );
+
+it("keeps the launch offering to 5×5 and 10×10", () => {
+  expect(DIFFICULTY_DIMENSIONS).toEqual({
+    [Difficulty.EASY]: { width: 5, height: 5 },
+    [Difficulty.MEDIUM]: { width: 10, height: 10 },
+  });
+  expect(() => generatePuzzle(Difficulty.HARD)).toThrow(/Unsupported Nonogram mode/);
+});

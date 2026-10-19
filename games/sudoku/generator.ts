@@ -1,9 +1,10 @@
 import { Difficulty } from "@/database/generated/client/enums";
 import {
-  CELL_COUNT,
+  BLITZ_RULES,
+  CLASSIC_RULES,
   EMPTY,
-  GRID_SIZE,
   type SudokuGrid,
+  type SudokuRules,
   boxOf,
   colOf,
   emptyGrid,
@@ -11,44 +12,55 @@ import {
 } from "./engine";
 import { countSolutions } from "./validator";
 
+export const SUDOKU_VARIANTS: Record<Difficulty, string> = {
+  [Difficulty.EASY]: "CHALLENGE_6X6_V2",
+  [Difficulty.MEDIUM]: "EASY_9X9_V1",
+  [Difficulty.HARD]: "HARD_9X9_V1",
+};
+
 function shuffle<T>(items: T[]): T[] {
   const result = [...items];
-  for (let i = result.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [result[i], result[j]] = [result[j], result[i]];
+  for (let index = result.length - 1; index > 0; index--) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [result[index], result[swapIndex]] = [result[swapIndex], result[index]];
   }
   return result;
 }
 
-/** Randomized backtracking fill — produces a uniformly-shuffled valid full grid. */
-export function generateSolvedGrid(): SudokuGrid {
-  const grid = emptyGrid();
-  const rowMask = new Array<number>(GRID_SIZE).fill(0);
-  const colMask = new Array<number>(GRID_SIZE).fill(0);
-  const boxMask = new Array<number>(GRID_SIZE).fill(0);
+export function rulesForDifficulty(difficulty: Difficulty): SudokuRules {
+  return difficulty === Difficulty.EASY ? BLITZ_RULES : CLASSIC_RULES;
+}
 
-  function backtrack(pos: number): boolean {
-    if (pos === CELL_COUNT) return true;
-    const r = rowOf(pos);
-    const c = colOf(pos);
-    const b = boxOf(pos);
-    const used = rowMask[r] | colMask[c] | boxMask[b];
+/** Randomized backtracking fill for either supported Sudoku shape. */
+export function generateSolvedGrid(rules: SudokuRules = CLASSIC_RULES): SudokuGrid {
+  const grid = emptyGrid(rules);
+  const cellCount = rules.size * rules.size;
+  const rowMask = new Array<number>(rules.size).fill(0);
+  const colMask = new Array<number>(rules.size).fill(0);
+  const boxMask = new Array<number>(rules.size).fill(0);
+  const digits = Array.from({ length: rules.size }, (_, index) => index + 1);
 
-    for (const digit of shuffle([1, 2, 3, 4, 5, 6, 7, 8, 9])) {
+  function backtrack(position: number): boolean {
+    if (position === cellCount) return true;
+    const row = rowOf(position, rules);
+    const col = colOf(position, rules);
+    const box = boxOf(position, rules);
+    const used = rowMask[row] | colMask[col] | boxMask[box];
+
+    for (const digit of shuffle(digits)) {
       const bit = 1 << digit;
       if (used & bit) continue;
+      grid[position] = digit;
+      rowMask[row] |= bit;
+      colMask[col] |= bit;
+      boxMask[box] |= bit;
 
-      grid[pos] = digit;
-      rowMask[r] |= bit;
-      colMask[c] |= bit;
-      boxMask[b] |= bit;
+      if (backtrack(position + 1)) return true;
 
-      if (backtrack(pos + 1)) return true;
-
-      grid[pos] = EMPTY;
-      rowMask[r] &= ~bit;
-      colMask[c] &= ~bit;
-      boxMask[b] &= ~bit;
+      grid[position] = EMPTY;
+      rowMask[row] &= ~bit;
+      colMask[col] &= ~bit;
+      boxMask[box] &= ~bit;
     }
     return false;
   }
@@ -57,13 +69,9 @@ export function generateSolvedGrid(): SudokuGrid {
   return grid;
 }
 
-// A clue-count target per difficulty is a common, simple proxy — fewer
-// givens tends to mean harder — not a true solve-technique difficulty
-// rating. SPEC doesn't specify a scheme; refining this is exactly what
-// `difficultyScore` on SudokuPuzzle exists for later (see docs/SPEC.md §14).
 export const DIFFICULTY_TARGET_CLUES: Record<string, number> = {
-  [Difficulty.EASY]: 42,
-  [Difficulty.MEDIUM]: 34,
+  [Difficulty.EASY]: 13,
+  [Difficulty.MEDIUM]: 40,
   [Difficulty.HARD]: 28,
 };
 
@@ -71,32 +79,24 @@ export interface GeneratedPuzzle {
   grid: SudokuGrid;
   solution: SudokuGrid;
   clueCount: number;
+  rules: SudokuRules;
 }
 
-/**
- * Starts from a full solved grid and removes cells one at a time (random
- * order), keeping each removal only if the puzzle still has exactly one
- * solution. Stops once the target clue count is reached or every cell has
- * been tried — carving toward the true minimum unique-solution puzzle is
- * much slower and isn't necessary for Easy/Medium/Hard buckets.
- */
+/** Carves clues while preserving exactly one solution for each public mode. */
 export function generatePuzzle(difficulty: Difficulty): GeneratedPuzzle {
-  const solution = generateSolvedGrid();
+  const rules = rulesForDifficulty(difficulty);
+  const solution = generateSolvedGrid(rules);
   const grid = [...solution];
   const target = DIFFICULTY_TARGET_CLUES[difficulty];
 
-  let clueCount = CELL_COUNT;
-  for (const idx of shuffle(Array.from({ length: CELL_COUNT }, (_, i) => i))) {
+  let clueCount = grid.length;
+  for (const index of shuffle(Array.from({ length: grid.length }, (_, value) => value))) {
     if (clueCount <= target) break;
-
-    const backup = grid[idx];
-    grid[idx] = EMPTY;
-    if (countSolutions(grid, 2) === 1) {
-      clueCount--;
-    } else {
-      grid[idx] = backup;
-    }
+    const backup = grid[index];
+    grid[index] = EMPTY;
+    if (countSolutions(grid, 2) === 1) clueCount--;
+    else grid[index] = backup;
   }
 
-  return { grid, solution, clueCount };
+  return { grid, solution, clueCount, rules };
 }

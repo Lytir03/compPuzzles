@@ -1,0 +1,5 @@
+-- Supabase CLI executes this conventional file automatically while starting a
+-- local stack. Runtime NOLOGIN roles are created by the audited migration.
+-- Production LOGIN credentials are provisioned separately with
+-- scripts/provision-runtime-roles.sql so no password substitution is attempted
+-- during local startup or CI.

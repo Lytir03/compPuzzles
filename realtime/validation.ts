@@ -1,4 +1,4 @@
-import { Difficulty, GameType } from "@/database/generated/client/enums";
+import { isRankedModeId, type RankedModeId } from "@/games/modes";
 
 /**
  * Input-boundary validation for every client→server socket event.
@@ -19,31 +19,31 @@ import { Difficulty, GameType } from "@/database/generated/client/enums";
 /** Generous ceiling: the largest legitimate payload is a 15×15 nonogram JSON grid (~1 KB). */
 export const MAX_PAYLOAD_LENGTH = 16_384;
 
-/** cuid v1/v2 ids are well under this; the cap just stops absurd keys reaching the DB. */
-const MAX_ID_LENGTH = 64;
-
-const GAME_TYPES = new Set<string>([GameType.SUDOKU, GameType.CROSSWORD, GameType.NONOGRAM]);
-const DIFFICULTIES = new Set<string>([Difficulty.EASY, Difficulty.MEDIUM, Difficulty.HARD]);
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isId(value: unknown): value is string {
-  return typeof value === "string" && value.length > 0 && value.length <= MAX_ID_LENGTH;
+  return (
+    typeof value === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+  );
+}
+
+function hasOnlyKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
+  const actual = Object.keys(value);
+  return actual.length === keys.length && actual.every((key) => keys.includes(key));
 }
 
 export interface QueueJoinInput {
-  gameType: GameType;
-  difficulty: Difficulty;
+  modeId: RankedModeId;
 }
 
 export function parseQueueJoin(data: unknown): QueueJoinInput | null {
   if (!isRecord(data)) return null;
-  const { gameType, difficulty } = data;
-  if (typeof gameType !== "string" || !GAME_TYPES.has(gameType)) return null;
-  if (typeof difficulty !== "string" || !DIFFICULTIES.has(difficulty)) return null;
-  return { gameType: gameType as GameType, difficulty: difficulty as Difficulty };
+  if (!hasOnlyKeys(data, ["modeId"])) return null;
+  if (!isRankedModeId(data.modeId)) return null;
+  return { modeId: data.modeId };
 }
 
 export interface MatchProgressInput {
@@ -52,8 +52,19 @@ export interface MatchProgressInput {
   percent: number;
 }
 
+export interface MatchSyncInput {
+  matchId: string;
+}
+
+export function parseMatchSync(data: unknown): MatchSyncInput | null {
+  if (!isRecord(data)) return null;
+  if (!hasOnlyKeys(data, ["matchId"])) return null;
+  return isId(data.matchId) ? { matchId: data.matchId } : null;
+}
+
 export function parseMatchProgress(data: unknown): MatchProgressInput | null {
   if (!isRecord(data)) return null;
+  if (!hasOnlyKeys(data, ["matchId", "percent"])) return null;
   const { matchId, percent } = data;
   if (!isId(matchId)) return null;
   // Number.isFinite rejects NaN/Infinity, which the old Math.round/clamp chain
@@ -69,6 +80,7 @@ export interface MatchSubmitInput {
 
 export function parseMatchSubmit(data: unknown): MatchSubmitInput | null {
   if (!isRecord(data)) return null;
+  if (!hasOnlyKeys(data, ["matchId", "payload"])) return null;
   const { matchId, payload } = data;
   if (!isId(matchId)) return null;
   if (typeof payload !== "string" || payload.length === 0 || payload.length > MAX_PAYLOAD_LENGTH) {

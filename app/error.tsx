@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import * as Sentry from "@sentry/nextjs";
 import { useEffect } from "react";
 
 /**
@@ -16,7 +17,7 @@ export default function AppError({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error("Route error:", error);
+    Sentry.captureException(error);
   }, [error]);
 
   return (
@@ -40,7 +41,7 @@ export default function AppError({
         >
           Try again
         </button>
-        <Link href="/dashboard" className="mt-3 text-sm font-bold text-[var(--brand-strong)] hover:underline">
+        <Link href="/dashboard" className="mt-3 text-sm font-bold text-[var(--brand-text)] hover:underline">
           Back to the game lobby
         </Link>
       </section>

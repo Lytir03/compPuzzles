@@ -1,8 +1,12 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/auth/currentUser";
-import { prisma } from "@/database/client";
-import { countRankedPlayers, fetchStandings } from "@/database/leaderboard";
+import { AdSlot } from "@/components/ads/AdSlot";
+import {
+  countRankedPlayers,
+  fetchStandingForPlayer,
+  fetchStandings,
+} from "@/database/leaderboard";
 import { GameType } from "@/database/generated/client/enums";
 import { RankBadge } from "@/components/RankBadge";
 import { winRate } from "@/lib/playerStats";
@@ -13,14 +17,13 @@ const GAME_TITLES: Record<string, string> = {
   [GameType.NONOGRAM]: "Nonograms",
 };
 
-const GAME_ORDER = [GameType.SUDOKU, GameType.CROSSWORD, GameType.NONOGRAM];
+const GAME_ORDER: GameType[] = [GameType.SUDOKU, GameType.NONOGRAM];
 const PODIUM = ["🥇", "🥈", "🥉"];
 const PAGE_SIZE = 50;
 
 const RANKED_HREFS: Partial<Record<string, string>> = {
   [GameType.SUDOKU]: "/sudoku/ranked",
   [GameType.NONOGRAM]: "/nonogram/ranked",
-  [GameType.CROSSWORD]: "/crossword/ranked",
 };
 
 function isGameType(value: string | undefined): value is GameType {
@@ -60,19 +63,8 @@ export default async function LeaderboardPage(props: PageProps<"/leaderboard">) 
 
   // If the viewer isn't in the visible page, pin their standing below it —
   // otherwise the ladder is useless to exactly the people it should motivate.
-  const viewerInPage = rows.some((row) => row.userId === user.id);
-  const viewerRow = viewerInPage
-    ? null
-    : await prisma.playerGameRating.findUnique({
-        where: { userId_gameType: { userId: user.id, gameType } },
-        include: { user: true },
-      });
-  const viewerRank =
-    viewerRow && viewerRow.gamesPlayed > 0
-      ? (await prisma.playerGameRating.count({
-          where: { gameType, gamesPlayed: { gt: 0 }, rating: { gt: viewerRow.rating } },
-        })) + 1
-      : null;
+  const viewerInPage = rows.some((row) => row.username === user.username);
+  const viewerRow = viewerInPage ? null : await fetchStandingForPlayer(gameType, user.username);
 
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6 sm:py-12">
@@ -143,10 +135,10 @@ export default async function LeaderboardPage(props: PageProps<"/leaderboard">) 
                   rating={row.rating}
                   gamesPlayed={row.gamesPlayed}
                   wins={row.wins}
-                  isViewer={row.userId === user.id}
+                  isViewer={row.username === user.username}
                 />
               ))}
-              {viewerRow && viewerRank !== null && (
+              {viewerRow && (
                 <>
                   <tr aria-hidden="true">
                     <td colSpan={5} className="subtle-text px-3 py-2 text-center text-xs font-black sm:px-4">
@@ -154,8 +146,8 @@ export default async function LeaderboardPage(props: PageProps<"/leaderboard">) 
                     </td>
                   </tr>
                   <LeaderboardRow
-                    rank={viewerRank}
-                    username={viewerRow.user.username}
+                    rank={viewerRow.rank}
+                    username={viewerRow.username}
                     rating={viewerRow.rating}
                     gamesPlayed={viewerRow.gamesPlayed}
                     wins={viewerRow.wins}
@@ -167,6 +159,8 @@ export default async function LeaderboardPage(props: PageProps<"/leaderboard">) 
           </table>
         </div>
       )}
+
+      <AdSlot placement="leaderboard-after-standings" format="inline" className="mt-8" />
 
       {totalPages > 1 && (
         <nav className="mt-6 flex items-center justify-between gap-3" aria-label="Leaderboard pages">
@@ -243,7 +237,7 @@ function LeaderboardRow({
           </span>
           <Link
             href={`/profile/${encodeURIComponent(username)}`}
-            className="max-w-28 truncate font-black hover:text-[var(--brand-strong)] hover:underline sm:max-w-none"
+            className="max-w-28 truncate font-black hover:text-[var(--brand-text)] hover:underline sm:max-w-none"
           >
             {username}
             {isViewer ? " (you)" : ""}

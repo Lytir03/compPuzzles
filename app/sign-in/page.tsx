@@ -1,70 +1,66 @@
-import { loginWithUsername } from "@/auth/login";
+import { redirect } from "next/navigation";
+import { signIn } from "@/auth/actions";
+import { AuthFooterLink, AuthMessage, AuthPanel, AUTH_INPUT_CLASS } from "@/auth/AuthPanel";
+import { getCurrentUser } from "@/auth/currentUser";
+import { devBypassSignIn, isDevBypassEnabled } from "@/auth/devBypass";
+import { TurnstileWidget } from "@/auth/TurnstileWidget";
 import { SubmitButton } from "@/components/SubmitButton";
 
-export default async function SignInPage(props: PageProps<"/sign-in">) {
-  const { error } = await props.searchParams;
+const ERRORS: Record<string, string> = {
+  captcha: "Please complete the security check and try again.",
+  "email-unverified": "Verify your email before signing in. You can request a new link below.",
+  "invalid-credentials": "The email or password is incorrect.",
+  "rate-limited": "Too many attempts. Wait a while before trying again.",
+  unavailable: "Sign-in is temporarily unavailable. Please try again later.",
+  "verification-link-invalid": "That verification link is invalid or expired. Request a new one.",
+};
+const NOTICES: Record<string, string> = {
+  "check-email": "Check your inbox. If the address can be registered, we sent a verification link.",
+  "password-updated": "Your password was updated. Sign in again on this device.",
+};
+
+export default async function SignInPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  if (await getCurrentUser()) redirect("/dashboard");
+  const params = await searchParams;
+  const error = typeof params.error === "string" ? ERRORS[params.error] ?? "The request could not be completed." : null;
+  const notice = typeof params.notice === "string" ? NOTICES[params.notice] ?? null : null;
 
   return (
-    <main className="mx-auto grid w-full max-w-4xl flex-1 items-center gap-6 px-6 py-12 md:grid-cols-[0.85fr_1.15fr] md:py-20">
-      <section className="checker-pattern hidden h-full min-h-[470px] flex-col justify-between overflow-hidden rounded-3xl bg-[#3e6132] p-8 text-white shadow-[0_7px_0_#2b4422] md:flex">
-        <div>
-          <span className="inline-flex rounded-full bg-white/10 px-3 py-1 text-xs font-extrabold uppercase tracking-widest text-[#d2edbd]">
-            Player login
-          </span>
-          <h2 className="mt-5 text-4xl font-black leading-tight tracking-[-0.04em]">Your next rival is waiting.</h2>
-          <p className="mt-3 text-sm font-medium leading-6 text-white/70">
-            Sign in, choose a difficulty, and race the same puzzle head-to-head.
-          </p>
+    <AuthPanel
+      eyebrow="Welcome back"
+      title="Sign in to your account"
+      description="Use the verified email and password linked to your player profile."
+      footer={<>New here? <AuthFooterLink href="/sign-up">Create a free account</AuthFooterLink>.</>}
+    >
+      <form action={signIn} className="mt-7 flex w-full flex-col gap-3">
+        <AuthMessage message={notice} tone="success" />
+        <AuthMessage message={error} />
+        <label htmlFor="email" className="text-sm font-extrabold">Email</label>
+        <input id="email" name="email" type="email" required maxLength={254} autoComplete="email" autoFocus className={AUTH_INPUT_CLASS} />
+        <div className="mt-1 flex items-center justify-between gap-3">
+          <label htmlFor="password" className="text-sm font-extrabold">Password</label>
+          <AuthFooterLink href="/auth/forgot-password">Forgot password?</AuthFooterLink>
         </div>
-        <div className="rounded-2xl bg-black/20 p-4 backdrop-blur-sm">
-          <div className="flex items-center gap-3">
-            <span className="grid h-11 w-11 place-items-center rounded-xl bg-[var(--gold)] text-lg text-[#4b380c]">🏆</span>
-            <div>
-              <p className="text-xs font-bold text-white/60">COMPETITIVE PUZZLES</p>
-              <p className="font-black">Solve. Win. Climb.</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="game-panel rounded-3xl p-6 sm:p-9">
-        <div>
-          <p className="eyebrow">Welcome back</p>
-          <h1 className="mt-2 text-3xl font-black tracking-[-0.04em]">Choose your player name</h1>
-          <p className="subtle-text mt-3 text-sm font-medium leading-6">
-            This local build uses a username only. Open a second browser session with another
-            name to test a live match.
-          </p>
-        </div>
-        <form action={loginWithUsername} className="mt-7 flex w-full flex-col gap-3">
-          <label htmlFor="username" className="text-sm font-extrabold">Username</label>
-          <input
-            id="username"
-            name="username"
-            placeholder="PuzzleMaster"
-            required
-            minLength={3}
-            maxLength={20}
-            pattern="[a-zA-Z0-9_-]+"
-            autoComplete="username"
-            autoFocus
-            className="h-13 rounded-xl border-2 border-[var(--line)] bg-[var(--surface)] px-4 font-bold outline-none transition placeholder:font-medium placeholder:text-[color-mix(in_srgb,var(--foreground)_35%,transparent)] focus:border-[var(--brand)] focus:ring-4 focus:ring-[color-mix(in_srgb,var(--brand)_18%,transparent)]"
-          />
-          {error && (
-            <p className="rounded-xl bg-red-500/10 px-3 py-2 text-sm font-semibold text-red-600">
-              {error === "rate-limited"
-                ? "Too many sign-in attempts for that name. Wait a moment and try again."
-                : "Use 3–20 letters, numbers, dashes, or underscores."}
-            </p>
-          )}
-          <SubmitButton
-            pendingLabel="Entering…"
-            className="game-button mt-2 rounded-xl px-4 py-3.5 text-base font-black disabled:cursor-wait disabled:opacity-70"
-          >
-            Enter the lobby →
-          </SubmitButton>
+        <input id="password" name="password" type="password" required maxLength={72} autoComplete="current-password" className={AUTH_INPUT_CLASS} />
+        <TurnstileWidget action="sign_in" />
+        <SubmitButton pendingLabel="Signing in…" className="game-button mt-1 rounded-xl px-4 py-3.5 text-base font-black disabled:cursor-wait disabled:opacity-70">
+          Sign in →
+        </SubmitButton>
+        <p className="subtle-text text-center text-sm font-semibold">
+          Email not verified? <AuthFooterLink href="/auth/verify">Resend the link</AuthFooterLink>
+        </p>
+      </form>
+      {isDevBypassEnabled() && (
+        <form action={devBypassSignIn} className="mt-4 border-t border-dashed border-current/20 pt-4">
+          <button type="submit" className="w-full rounded-xl border border-dashed px-4 py-2 text-sm font-bold opacity-80">
+            Dev only: skip login
+          </button>
         </form>
-      </section>
-    </main>
+      )}
+    </AuthPanel>
   );
 }

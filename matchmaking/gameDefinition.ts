@@ -29,10 +29,10 @@ export interface GameDefinition {
 
   /**
    * Picks (or generates) a puzzle for a new match. Both players get the
-   * same one; `participantUserIds` lets the implementation avoid puzzles
-   * either player has already seen (SPEC §13), best-effort.
+   * same one. Puzzle reuse is intentional; the server chooses from the
+   * published pool without exposing private solution records.
    */
-  createMatch(difficulty: Difficulty, participantUserIds: string[]): Promise<PuzzleAssignment>;
+  createMatch(difficulty: Difficulty, participantCompetitorIds: string[]): Promise<PuzzleAssignment>;
 
   /** Re-fetches an existing puzzle's client payload (reconnect-resume, submit validation). */
   getPuzzlePayload(puzzleId: string): Promise<string>;

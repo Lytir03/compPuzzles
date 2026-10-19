@@ -64,9 +64,12 @@ describe("RateLimiter", () => {
     expect(limiter.check("b", "alice", now).allowed).toBe(true);
   });
 
-  it("allows unknown rules through rather than throwing", () => {
+  it("fails closed for unknown rules without throwing", () => {
     const limiter = new RateLimiter({});
-    expect(limiter.check("not-configured", "user").allowed).toBe(true);
+    expect(limiter.check("not-configured", "user")).toEqual({
+      allowed: false,
+      retryAfterMs: 60_000,
+    });
   });
 
   it("forgets a key's buckets", () => {
@@ -86,6 +89,7 @@ describe("RateLimiter", () => {
     expect(Object.keys(REALTIME_RATE_LIMITS).sort()).toEqual([
       "match:progress",
       "match:submit",
+      "match:sync",
       "queue:join",
       "queue:leave",
     ]);

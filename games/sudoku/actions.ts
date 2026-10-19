@@ -1,38 +1,28 @@
 "use server";
 
-import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/auth/currentUser";
-import { prisma } from "@/database/client";
-import { Difficulty, GameType } from "@/database/generated/client/enums";
-import {
-  assertDifficulty,
-  assertDurationMs,
-  assertPuzzleId,
-  enforceRateLimit,
-} from "@/lib/actionGuards";
-import { CELL_COUNT } from "./engine";
-import { sudokuGameDefinition } from "./gameDefinition";
+import { Difficulty } from "@/database/generated/client/enums";
+import type { RankedModeId } from "@/games/modes";
+import { requestPracticeAssignment, submitPracticeAssignment } from "@/lib/practiceApi";
 
-const GRID_STRING_PATTERN = /^[0-9]{81}$/;
+const GRID_STRING_PATTERN = /^(?:[0-6]{36}|[0-9]{81})$/;
+
+const MODE_BY_DIFFICULTY: Record<Difficulty, RankedModeId> = {
+  [Difficulty.EASY]: "SUDOKU_6X6_CHALLENGE",
+  [Difficulty.MEDIUM]: "SUDOKU_9X9_EASY",
+  [Difficulty.HARD]: "SUDOKU_9X9_HARD",
+};
 
 export interface PracticePuzzle {
-  puzzleId: string;
+  assignmentId: string;
   grid: string;
 }
 
-/**
- * Picks a puzzle for the signed-in user to practice. Reuses the same
- * createMatch() a ranked match would use (see gameDefinition.ts), which
- * already avoids puzzles this user has attempted before where possible
- * (SPEC §13) — practice and ranked share one puzzle-selection path.
- */
 export async function startPracticePuzzle(difficulty: Difficulty): Promise<PracticePuzzle> {
-  const user = await getCurrentUser();
-  if (!user) redirect("/sign-in");
-  enforceRateLimit("practice:start", user.id);
-
-  const assignment = await sudokuGameDefinition.createMatch(assertDifficulty(difficulty), [user.id]);
-  return { puzzleId: assignment.puzzleId, grid: assignment.clientPayload };
+  const modeId = MODE_BY_DIFFICULTY[difficulty];
+  if (!modeId) throw new Error("Unsupported Sudoku practice mode.");
+  const assignment = await requestPracticeAssignment(modeId);
+  if (!GRID_STRING_PATTERN.test(assignment.payload)) throw new Error("Invalid Sudoku assignment.");
+  return { assignmentId: assignment.assignmentId, grid: assignment.payload };
 }
 
 export interface SubmitResult {
@@ -40,47 +30,14 @@ export interface SubmitResult {
   correct: boolean;
 }
 
-/**
- * Authoritative completion check: re-derives correctness from the puzzle's
- * given cells (never the stored solution — see validator.ts). `durationMs`
- * is client-reported and only used for the practice record, not anything
- * rating-affecting, so it isn't independently verified here.
- */
 export async function submitPracticeSolution(
-  puzzleId: string,
+  assignmentId: string,
   submittedGridString: string,
-  durationMs: number,
+  _clientDurationMs: number,
 ): Promise<SubmitResult> {
-  const user = await getCurrentUser();
-  if (!user) redirect("/sign-in");
-  // Each call is a puzzle fetch plus a full validation, and would otherwise be
-  // an unmetered correctness oracle — including against a puzzle the caller is
-  // currently playing in a ranked match.
-  enforceRateLimit("practice:submit", user.id);
-
-  if (typeof submittedGridString !== "string" || !GRID_STRING_PATTERN.test(submittedGridString)) {
-    throw new Error(`Expected an ${CELL_COUNT}-digit grid string`);
+  void _clientDurationMs;
+  if (!GRID_STRING_PATTERN.test(submittedGridString)) {
+    throw new Error("Expected a valid 36-cell Blitz or 81-cell classic Sudoku grid");
   }
-  const duration = assertDurationMs(durationMs);
-
-  const puzzle = await prisma.puzzle.findUnique({
-    where: { id: assertPuzzleId(puzzleId) },
-    include: { sudoku: true },
-  });
-  if (!puzzle?.sudoku || puzzle.gameType !== GameType.SUDOKU) {
-    throw new Error(`No Sudoku puzzle found for id ${puzzleId}`);
-  }
-
-  const result = await sudokuGameDefinition.validateCompletion(puzzleId, submittedGridString);
-
-  await prisma.puzzleAttempt.create({
-    data: {
-      userId: user.id,
-      puzzleId,
-      durationMs: duration,
-      completed: result.correct,
-    },
-  });
-
-  return result;
+  return submitPracticeAssignment(assignmentId, submittedGridString);
 }

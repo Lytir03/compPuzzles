@@ -1,10 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getRealtimeToken } from "@/auth/realtimeToken";
+import { useRouter } from "next/navigation";
+import { getRealtimeTicket } from "@/auth/realtimeToken";
 import type { Difficulty, GameType } from "@/database/generated/client/enums";
+import { rankedModeIdFor } from "@/games/modes";
 import type { MatchFoundPayload, MatchResultPayload } from "@/realtime/events";
 import { createRealtimeSocket, type AppClientSocket } from "@/realtime/client";
+import {
+  forgetRankedMatch,
+  readRememberedRankedMatch,
+  rememberRankedMatch,
+} from "./matchSession";
+import { reconnectWithFreshTicket } from "./reconnect";
 
 /**
  * All the ranked-match wiring that is identical for Sudoku, Nonogram and
@@ -46,6 +54,7 @@ export interface RankedMatchState {
   mistakes: number;
   /** Set between emitting a correct-looking grid and the server ruling on it. */
   awaitingVerdict: boolean;
+  canRetrySubmission: boolean;
   /** Difficulty of the last queue join, so "play again" can requeue in one tap. */
   lastDifficulty: Difficulty | null;
 }
@@ -64,6 +73,7 @@ const INITIAL_STATE: RankedMatchState = {
   notice: null,
   mistakes: 0,
   awaitingVerdict: false,
+  canRetrySubmission: false,
   lastDifficulty: null,
 };
 
@@ -72,6 +82,7 @@ export interface RankedMatchController extends RankedMatchState {
   leaveQueue: () => void;
   reportProgress: (percent: number) => void;
   submit: (payload: string) => void;
+  retrySubmission: () => void;
   /** Back to difficulty selection, keeping the socket. */
   playAgain: () => void;
   /** Requeue at the same difficulty as the last match. */
@@ -80,29 +91,48 @@ export interface RankedMatchController extends RankedMatchState {
 }
 
 export function useRankedMatch(gameType: GameType): RankedMatchController {
+  const router = useRouter();
   const socketRef = useRef<AppClientSocket | null>(null);
+  const reconnectAttemptRef = useRef<Promise<void> | null>(null);
+  const expectedMatchIdRef = useRef<string | null>(null);
   const [state, setState] = useState<RankedMatchState>(INITIAL_STATE);
+  const stateRef = useRef<RankedMatchState>(INITIAL_STATE);
+  const submissionRef = useRef<{ matchId: string; payload: string } | null>(null);
+
+  // Run transitions once, outside React's replayable state updater callbacks.
+  // The ref also closes the gap between a double tap and the next render.
+  const updateState = useCallback((transition: (previous: RankedMatchState) => RankedMatchState) => {
+    const next = transition(stateRef.current);
+    stateRef.current = next;
+    setState(next);
+  }, []);
 
   const patch = useCallback((changes: Partial<RankedMatchState>) => {
-    setState((prev) => ({ ...prev, ...changes }));
-  }, []);
+    updateState((prev) => ({ ...prev, ...changes }));
+  }, [updateState]);
 
   useEffect(() => {
     let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let failedAdmissions = 0;
 
-    (async () => {
-      const token = await getRealtimeToken();
+    void (async () => {
+      const ticket = await getRealtimeTicket();
       if (cancelled) return;
-      if (!token) {
+      if (!ticket) {
         patch({ phase: "error", errorMessage: "Not signed in.", connection: "offline" });
         return;
       }
 
-      const socket = createRealtimeSocket(token);
+      const socket = createRealtimeSocket(ticket);
       socketRef.current = socket;
 
       socket.on("connect", () => {
-        setState((prev) => {
+        failedAdmissions = 0;
+        const rememberedMatchId = readRememberedRankedMatch(gameType);
+        expectedMatchIdRef.current = rememberedMatchId;
+        if (rememberedMatchId) socket.emit("match:sync", { matchId: rememberedMatchId });
+        updateState((prev) => {
           // A reconnect must not throw away a live match — the server replays
           // it via match:resume. Only the very first connect opens the lobby.
           if (prev.phase === "connecting") {
@@ -124,7 +154,7 @@ export function useRankedMatch(gameType: GameType): RankedMatchController {
       });
 
       socket.on("disconnect", () => {
-        setState((prev) =>
+        updateState((prev) =>
           prev.phase === "result" || prev.phase === "error"
             ? { ...prev, connection: "offline" }
             : { ...prev, connection: "reconnecting" },
@@ -132,77 +162,152 @@ export function useRankedMatch(gameType: GameType): RankedMatchController {
       });
 
       socket.on("connect_error", () => {
-        setState((prev) => {
-          // Never connected at all: a hard error. Already in a session: this
-          // is a failed reconnect attempt, and Socket.IO will keep retrying.
-          if (prev.phase === "connecting") {
-            return {
-              ...prev,
-              phase: "error",
-              errorMessage: "Couldn't connect to the match server.",
-              connection: "offline",
-            };
-          }
-          return { ...prev, connection: "reconnecting" };
-        });
-        // The handshake token expires; mint a fresh one so long sessions can
-        // still reconnect (see auth/sessionCookie.ts REALTIME_TOKEN_TTL_MS).
-        void refreshToken(socket);
+        updateState((prev) => ({ ...prev, connection: "reconnecting" }));
+
+        // A middleware rejection destroys this Socket.IO Socket. Admission
+        // tickets are also one-use, so recover with a fresh ticket *and* an
+        // explicit connect(), while coalescing duplicate connect_error events.
+        if (reconnectAttemptRef.current) return;
+        const attempt = new Promise<void>((resolve) => {
+          // A refused admission needs an explicit reconnect. Back off here so
+          // an outage cannot spin through the BFF ticket rate limit.
+          retryTimer = setTimeout(resolve, Math.min(15_000, 1_000 * 2 ** Math.min(failedAdmissions++, 4)));
+        }).then(() => reconnectWithFreshTicket(
+          socket, getRealtimeTicket, () => !cancelled && socketRef.current === socket,
+        ))
+          .then((started) => {
+            if (!started && !cancelled && socketRef.current === socket && !socket.connected) {
+              patch({
+                phase: "error",
+                errorMessage: "Couldn't reconnect to the match server.",
+                connection: "offline",
+              });
+            }
+          })
+          .catch(() => {
+            if (!cancelled && socketRef.current === socket) {
+              patch({
+                phase: "error",
+                errorMessage: "Couldn't authenticate with the match server.",
+                connection: "offline",
+              });
+            }
+          })
+          .finally(() => {
+            if (reconnectAttemptRef.current === attempt) reconnectAttemptRef.current = null;
+          });
+        reconnectAttemptRef.current = attempt;
       });
 
-      socket.on("queue:joined", ({ queuedAt }) => patch({ phase: "queued", queuedAt, notice: null }));
-      socket.on("queue:left", () => patch({ phase: "idle", queuedAt: null }));
-      socket.on("queue:error", ({ message }) => patch({ phase: "idle", queuedAt: null, notice: message }));
+      socket.on("queue:joined", ({ queuedAt }) => {
+        if (stateRef.current.phase !== "queued") return;
+        expectedMatchIdRef.current = null;
+        forgetRankedMatch(gameType);
+        patch({ phase: "queued", queuedAt, notice: null });
+      });
+      socket.on("queue:left", () => {
+        if (stateRef.current.phase === "queued") patch({ phase: "idle", queuedAt: null });
+      });
+      socket.on("queue:error", ({ message }) => {
+        patch(stateRef.current.phase === "queued"
+          ? { phase: "idle", queuedAt: null, notice: message }
+          : { notice: message });
+      });
 
-      socket.on("match:found", (match) =>
+      socket.on("match:found", (match) => {
+        if (match.gameType !== gameType) {
+          router.replace(`/${match.gameType.toLowerCase()}/ranked`);
+          return;
+        }
+        submissionRef.current = null;
+        expectedMatchIdRef.current = match.matchId;
+        rememberRankedMatch(gameType, match.matchId);
         patch({
-          phase: "countdown",
+          phase: match.startsAt > Date.now() ? "countdown" : "playing",
           match,
+          lastDifficulty: match.difficulty,
           secondsLeft: Math.max(0, Math.ceil((match.startsAt - Date.now()) / 1000)),
           opponentPercent: 0,
           opponentConnected: true,
           opponentGraceMs: null,
           mistakes: 0,
           awaitingVerdict: false,
+          canRetrySubmission: false,
           notice: null,
           result: null,
-        }),
-      );
-      socket.on("match:resume", (match) =>
+        });
+      });
+      socket.on("match:resume", (match) => {
+        if (match.gameType !== gameType) {
+          router.replace(`/${match.gameType.toLowerCase()}/ranked`);
+          return;
+        }
+        expectedMatchIdRef.current = match.matchId;
+        rememberRankedMatch(gameType, match.matchId);
+        if (stateRef.current.phase === "result" && stateRef.current.result?.matchId === match.matchId) return;
+        const pending = submissionRef.current;
+        const retrying = pending?.matchId === match.matchId;
         patch({
-          phase: "playing",
+          phase: match.startsAt > Date.now() ? "countdown" : "playing",
+          secondsLeft: Math.max(0, Math.ceil((match.startsAt - Date.now()) / 1000)),
           match,
-          opponentPercent: 0,
-          awaitingVerdict: false,
+          lastDifficulty: match.difficulty,
+          awaitingVerdict: retrying,
+          canRetrySubmission: false,
           notice: "Reconnected — your match is still live.",
-        }),
-      );
-      socket.on("match:opponentProgress", ({ percent }) => patch({ opponentPercent: percent }));
-      socket.on("match:opponentDisconnected", ({ graceMs }) =>
-        patch({ opponentConnected: false, opponentGraceMs: graceMs }),
-      );
-      socket.on("match:opponentReconnected", () =>
-        patch({ opponentConnected: true, opponentGraceMs: null }),
-      );
-      socket.on("match:rejected", ({ mistakes }) =>
+        });
+        if (retrying) socket.emit("match:submit", pending);
+      });
+      socket.on("match:opponentProgress", ({ matchId, percent }) => {
+        if (expectedMatchIdRef.current === matchId) patch({ opponentPercent: percent });
+      });
+      socket.on("match:opponentDisconnected", ({ matchId, graceMs }) => {
+        if (expectedMatchIdRef.current === matchId) patch({ opponentConnected: false, opponentGraceMs: graceMs });
+      });
+      socket.on("match:opponentReconnected", ({ matchId }) => {
+        if (expectedMatchIdRef.current === matchId) patch({ opponentConnected: true, opponentGraceMs: null });
+      });
+      socket.on("match:rejected", ({ matchId, mistakes }) => {
+        if (expectedMatchIdRef.current !== matchId) return;
+        submissionRef.current = null;
         patch({
           mistakes,
           awaitingVerdict: false,
+          canRetrySubmission: false,
           notice: "That grid isn't correct yet — keep going.",
-        }),
-      );
-      socket.on("match:result", (result) =>
-        patch({ phase: "result", result, awaitingVerdict: false, notice: null }),
-      );
-      socket.on("error", ({ message }) => patch({ notice: message, awaitingVerdict: false }));
-    })();
+        });
+      });
+      socket.on("match:result", (result) => {
+        // Ignore a late replay for a match whose queue pointer was already
+        // cleared/replaced while the membership query was in flight.
+        if (expectedMatchIdRef.current !== result.matchId) return;
+        submissionRef.current = null;
+        rememberRankedMatch(gameType, result.matchId);
+        patch({ phase: "result", result, awaitingVerdict: false, canRetrySubmission: false, notice: null });
+      });
+      socket.on("error", ({ message }) => patch({
+        notice: message,
+        awaitingVerdict: false,
+        canRetrySubmission: submissionRef.current !== null,
+      }));
+    })().catch(() => {
+      if (!cancelled) {
+        patch({
+          phase: "error",
+          errorMessage: "Couldn't authenticate with the match server.",
+          connection: "offline",
+        });
+      }
+    });
 
     return () => {
       cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
+      reconnectAttemptRef.current = null;
       socketRef.current?.disconnect();
       socketRef.current = null;
     };
-  }, [patch]);
+  }, [gameType, patch, router, updateState]);
 
   // Countdown ticker — separate effect so it only (re)starts when a new match arrives.
   const countdownMatchId = state.phase === "countdown" ? state.match?.matchId : null;
@@ -222,16 +327,22 @@ export function useRankedMatch(gameType: GameType): RankedMatchController {
 
   const joinQueue = useCallback(
     (difficulty: Difficulty) => {
-      setState((prev) =>
+      if (stateRef.current.phase !== "idle" || !socketRef.current?.connected) return;
+      const modeId = rankedModeIdFor(gameType, difficulty);
+      if (!modeId) {
+        patch({ phase: "idle", notice: "That ranked mode isn't available." });
+        return;
+      }
+      updateState((prev) =>
         // Guard the double-tap: the phase only becomes "queued" once the
         // server acknowledges, so without this a fast second tap emits twice.
         prev.phase !== "idle"
           ? prev
           : { ...prev, phase: "queued", queuedAt: null, lastDifficulty: difficulty, notice: null },
       );
-      socketRef.current?.emit("queue:join", { gameType, difficulty });
+      socketRef.current?.emit("queue:join", { modeId });
     },
-    [gameType],
+    [gameType, patch, updateState],
   );
 
   const leaveQueue = useCallback(() => {
@@ -239,38 +350,62 @@ export function useRankedMatch(gameType: GameType): RankedMatchController {
   }, []);
 
   const reportProgress = useCallback((percent: number) => {
-    setState((prev) => {
-      if (prev.match) {
-        socketRef.current?.emit("match:progress", { matchId: prev.match.matchId, percent });
+    updateState((prev) => {
+      if (prev.phase === "playing" && prev.match && socketRef.current?.connected) {
+        socketRef.current.emit("match:progress", { matchId: prev.match.matchId, percent });
       }
       return prev;
     });
-  }, []);
+  }, [updateState]);
 
   const submit = useCallback((payload: string) => {
-    setState((prev) => {
-      if (!prev.match || prev.awaitingVerdict) return prev;
-      socketRef.current?.emit("match:submit", { matchId: prev.match.matchId, payload });
-      return { ...prev, awaitingVerdict: true };
+    updateState((prev) => {
+      if (!prev.match || prev.phase !== "playing" || prev.awaitingVerdict) return prev;
+      submissionRef.current = { matchId: prev.match.matchId, payload };
+      if (!socketRef.current?.connected) return { ...prev, notice: "Your solution will be checked when you reconnect." };
+      socketRef.current.emit("match:submit", submissionRef.current);
+      return { ...prev, awaitingVerdict: true, canRetrySubmission: false };
     });
-  }, []);
+  }, [updateState]);
+
+  const retrySubmission = useCallback(() => {
+    const pending = submissionRef.current;
+    if (pending && pending.matchId === expectedMatchIdRef.current) submit(pending.payload);
+  }, [submit]);
 
   const playAgain = useCallback(() => {
-    setState((prev) => ({
+    expectedMatchIdRef.current = null;
+    submissionRef.current = null;
+    forgetRankedMatch(gameType);
+    updateState((prev) => ({
       ...INITIAL_STATE,
       phase: prev.connection === "online" ? "idle" : "connecting",
       connection: prev.connection,
       lastDifficulty: prev.lastDifficulty,
     }));
-  }, []);
+  }, [gameType, updateState]);
 
   const playAgainSameDifficulty = useCallback(() => {
-    setState((prev) => {
+    if (stateRef.current.phase !== "result") return;
+    expectedMatchIdRef.current = null;
+    submissionRef.current = null;
+    forgetRankedMatch(gameType);
+    updateState((prev) => {
       const difficulty = prev.lastDifficulty;
-      if (!difficulty || prev.connection !== "online") {
+      if (prev.phase !== "result") return prev;
+      if (!difficulty || !socketRef.current?.connected) {
         return { ...INITIAL_STATE, phase: "idle", connection: prev.connection, lastDifficulty: prev.lastDifficulty };
       }
-      socketRef.current?.emit("queue:join", { gameType, difficulty });
+      const modeId = rankedModeIdFor(gameType, difficulty);
+      if (!modeId) {
+        return {
+          ...INITIAL_STATE,
+          phase: "idle",
+          connection: prev.connection,
+          notice: "That ranked mode isn't available.",
+        };
+      }
+      socketRef.current?.emit("queue:join", { modeId });
       return {
         ...INITIAL_STATE,
         phase: "queued",
@@ -278,7 +413,7 @@ export function useRankedMatch(gameType: GameType): RankedMatchController {
         lastDifficulty: difficulty,
       };
     });
-  }, [gameType]);
+  }, [gameType, updateState]);
 
   const dismissNotice = useCallback(() => patch({ notice: null }), [patch]);
 
@@ -289,6 +424,7 @@ export function useRankedMatch(gameType: GameType): RankedMatchController {
       leaveQueue,
       reportProgress,
       submit,
+      retrySubmission,
       playAgain,
       playAgainSameDifficulty,
       dismissNotice,
@@ -299,19 +435,10 @@ export function useRankedMatch(gameType: GameType): RankedMatchController {
       leaveQueue,
       reportProgress,
       submit,
+      retrySubmission,
       playAgain,
       playAgainSameDifficulty,
       dismissNotice,
     ],
   );
-}
-
-async function refreshToken(socket: AppClientSocket) {
-  try {
-    const token = await getRealtimeToken();
-    if (token) socket.auth = { token };
-  } catch {
-    // Offline — Socket.IO keeps retrying with the existing token, and the
-    // next successful refresh will pick up a fresh one.
-  }
 }

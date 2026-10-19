@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getCurrentUser } from "@/auth/currentUser";
+import { AdSlot } from "@/components/ads/AdSlot";
 import { GAME_TITLES, MatchHistoryList } from "@/components/MatchHistoryList";
 import { RankBadge } from "@/components/RankBadge";
-import { prisma } from "@/database/client";
 import { GameType } from "@/database/generated/client/enums";
+import { fetchPublicPlayer } from "@/database/leaderboard";
 import { fetchCompletionTimes, fetchMatchHistory } from "@/database/matchHistory";
 import { formatElapsed } from "@/lib/formatElapsed";
 import {
@@ -15,12 +16,11 @@ import {
   type FormResult,
 } from "@/lib/playerStats";
 
-const GAME_ORDER = [GameType.SUDOKU, GameType.CROSSWORD, GameType.NONOGRAM];
+const GAME_ORDER: GameType[] = [GameType.SUDOKU, GameType.NONOGRAM];
 
 const RANKED_HREFS: Record<string, string> = {
   [GameType.SUDOKU]: "/sudoku/ranked",
   [GameType.NONOGRAM]: "/nonogram/ranked",
-  [GameType.CROSSWORD]: "/crossword/ranked",
 };
 
 export default async function ProfilePage(props: PageProps<"/profile/[username]">) {
@@ -29,20 +29,19 @@ export default async function ProfilePage(props: PageProps<"/profile/[username]"
 
   const { username } = await props.params;
 
-  const player = await prisma.user.findUnique({
-    where: { username: decodeURIComponent(username) },
-    include: { ratings: true },
-  });
+  const player = await fetchPublicPlayer(username);
   if (!player) notFound();
 
-  const isSelf = player.id === viewer.id;
+  const isSelf = player.isViewer || player.username === viewer.username;
   const ratingByGame = new Map(player.ratings.map((r) => [r.gameType, r]));
 
   // Completion times per game, plus recent matches, in one round of queries.
-  const [completionTimes, recentMatches] = await Promise.all([
-    Promise.all(GAME_ORDER.map((gameType) => fetchCompletionTimes(player.id, gameType))),
-    fetchMatchHistory(player.id, { take: 8 }),
-  ]);
+  const [completionTimes, recentMatches] = isSelf
+    ? await Promise.all([
+        Promise.all(GAME_ORDER.map((gameType) => fetchCompletionTimes(viewer.id, gameType))),
+        fetchMatchHistory(viewer.id, { take: 8 }),
+      ])
+    : [GAME_ORDER.map(() => [] as (number | null)[]), []];
 
   const streak = currentStreak(
     recentMatches.map((m) => (m.result ?? "DRAW") as FormResult),
@@ -143,6 +142,8 @@ export default async function ProfilePage(props: PageProps<"/profile/[username]"
         })}
       </div>
 
+      <AdSlot placement="profile-after-ratings" className="mt-10" />
+
       <section className="mt-12 pb-8">
         <div className="flex items-center justify-between gap-4">
           <div>
@@ -155,15 +156,19 @@ export default async function ProfilePage(props: PageProps<"/profile/[username]"
             </Link>
           )}
         </div>
-        <MatchHistoryList
-          rows={recentMatches}
-          linkToDetail={isSelf}
-          emptyMessage={
-            isSelf
-              ? "Finish a ranked game and your result will appear here."
-              : `${player.username} hasn't finished a ranked match yet.`
-          }
-        />
+        {isSelf ? (
+          <MatchHistoryList
+            rows={recentMatches}
+            linkToDetail
+            emptyMessage="Finish a ranked game and your result will appear here."
+          />
+        ) : (
+          <div className="game-panel mt-4 rounded-3xl px-6 py-10 text-center">
+            <p className="subtle-text text-sm font-bold">
+              Detailed match history, solve times, and mistakes are private.
+            </p>
+          </div>
+        )}
       </section>
     </main>
   );

@@ -1,6 +1,5 @@
-// Prisma schema — see docs/SPEC.md §19 for the entity design this follows.
-// Datasource URL is supplied by prisma.config.ts (reads DATABASE_URL from .env.local),
-// not hardcoded here.
+// Prisma is a typed client model only. Supabase SQL migrations under
+// supabase/migrations are the schema authority for auth, RLS, grants and DDL.
 
 generator client {
   provider = "prisma-client"
@@ -9,24 +8,31 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  schemas  = ["public", "private"]
 }
 
 enum GameType {
   SUDOKU
   CROSSWORD
   NONOGRAM
+
+  @@schema("public")
 }
 
 enum Difficulty {
   EASY
   MEDIUM
   HARD
+
+  @@schema("public")
 }
 
 enum PuzzleStatus {
   DRAFT
   PUBLISHED
   ARCHIVED
+
+  @@schema("public")
 }
 
 enum MatchStatus {
@@ -35,6 +41,8 @@ enum MatchStatus {
   COMPLETED
   ABANDONED
   CANCELLED
+
+  @@schema("public")
 }
 
 enum MatchResult {
@@ -42,6 +50,8 @@ enum MatchResult {
   LOSS
   DRAW
   ABANDONED
+
+  @@schema("public")
 }
 
 enum DisconnectStatus {
@@ -49,48 +59,102 @@ enum DisconnectStatus {
   DISCONNECTED
   RECONNECTED
   ABANDONED
+
+  @@schema("public")
 }
 
-model User {
-  id        String   @id @default(cuid())
-  // Both nullable: Phase 1 uses local username-only accounts (no Clerk yet).
-  // Populated once Clerk is reintroduced for a non-local deployment.
-  clerkId   String?  @unique
-  username  String   @unique
-  email     String?  @unique
-  avatarUrl String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+enum CompetitorStatus {
+  ACTIVE
+  DELETED
 
+  @@schema("public")
+}
+
+/// Pseudonymous competitive actor. It intentionally contains no account PII.
+/// Its UUID must never be exposed by browser-facing views or logs.
+model Competitor {
+  id        String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  status    CompetitorStatus @default(ACTIVE)
+  createdAt DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime         @updatedAt @db.Timestamptz(3)
+
+  profile           AccountProfile?
   ratings           PlayerGameRating[]
   matchParticipants MatchParticipant[]
-  puzzleAttempts    PuzzleAttempt[]
   ratingChanges     RatingChange[]
-  queueEntries      MatchmakingQueueEntry[]
-  wonMatches        Match[]                  @relation("MatchWinner")
+  queueEntry        MatchmakingQueueEntry?
+  wonMatches        Match[]                @relation("MatchWinner")
+
+  @@index([status])
+  @@schema("public")
 }
 
-// Rating defaults below (1500 / 350 / 0.06) mirror rating/constants.ts —
-// keep both in sync manually if the initial values ever change (SPEC §5/§6).
+/// The only live auth/profile -> competitive identity mapping.
+model AccountProfile {
+  authUserId        String   @id @db.Uuid
+  competitorId      String   @unique @db.Uuid
+  username          String
+  usernameCanonical String   @unique
+  avatarUrl         String?
+  termsVersion      String
+  termsAcceptedAt   DateTime @db.Timestamptz(3)
+  ageAttestedAt     DateTime @db.Timestamptz(3)
+  usernameChangedAt DateTime @default(now()) @db.Timestamptz(3)
+  createdAt         DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @db.Timestamptz(3)
+
+  competitor Competitor      @relation(fields: [competitorId], references: [id], onDelete: Restrict)
+  attempts   PuzzleAttempt[]
+
+  @@index([usernameCanonical])
+  @@schema("public")
+}
+
+/// Private, short-lived signup metadata. No profile or rating exists before
+/// Supabase confirms the email address.
+model PendingSignup {
+  authUserId        String   @id @db.Uuid
+  username          String
+  usernameCanonical String
+  termsVersion      String
+  termsAcceptedAt   DateTime @db.Timestamptz(3)
+  ageAttestedAt     DateTime @db.Timestamptz(3)
+  createdAt         DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([createdAt])
+  @@schema("private")
+}
+
+/// Serializes username claims across unverified and verified accounts.
+model UsernameClaim {
+  usernameCanonical String   @id
+  authUserId        String   @unique @db.Uuid
+  createdAt         DateTime @default(now()) @db.Timestamptz(3)
+
+  @@schema("private")
+}
+
+// Rating defaults mirror rating/constants.ts.
 model PlayerGameRating {
-  id              String   @id @default(cuid())
-  userId          String
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  competitorId    String   @db.Uuid
   gameType        GameType
-  rating          Float    @default(1500)
+  rating          Float    @default(400)
   ratingDeviation Float    @default(350)
   volatility      Float    @default(0.06)
-  peakRating      Float    @default(1500)
+  peakRating      Float    @default(400)
   gamesPlayed     Int      @default(0)
   wins            Int      @default(0)
   losses          Int      @default(0)
   draws           Int      @default(0)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(3)
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  competitor Competitor @relation(fields: [competitorId], references: [id], onDelete: Restrict)
 
-  @@unique([userId, gameType])
+  @@unique([competitorId, gameType])
   @@index([gameType, rating])
+  @@schema("public")
 }
 
 model Puzzle {
@@ -99,7 +163,7 @@ model Puzzle {
   difficulty Difficulty
   status     PuzzleStatus @default(PUBLISHED)
   metadata   Json?
-  createdAt  DateTime     @default(now())
+  createdAt  DateTime     @default(now()) @db.Timestamptz(3)
 
   sudoku    SudokuPuzzle?
   crossword CrosswordPuzzle?
@@ -108,17 +172,29 @@ model Puzzle {
   attempts  PuzzleAttempt[]
 
   @@index([gameType, difficulty, status])
+  @@schema("public")
 }
 
 model SudokuPuzzle {
   id              String   @id @default(cuid())
   puzzleId        String   @unique
-  grid            String // 81-char string, '0' = empty cell
-  solution        String // 81-char string, never sent to client pre-completion
+  grid            String
   difficultyScore Int?
-  createdAt       DateTime @default(now())
+  createdAt       DateTime @default(now()) @db.Timestamptz(3)
 
-  puzzle Puzzle @relation(fields: [puzzleId], references: [id], onDelete: Cascade)
+  puzzle Puzzle              @relation(fields: [puzzleId], references: [id], onDelete: Cascade)
+  secret SudokuPuzzleSecret?
+
+  @@schema("public")
+}
+
+model SudokuPuzzleSecret {
+  puzzleId String @id
+  solution String
+
+  puzzle SudokuPuzzle @relation(fields: [puzzleId], references: [puzzleId], onDelete: Cascade)
+
+  @@schema("private")
 }
 
 model CrosswordPuzzle {
@@ -127,126 +203,154 @@ model CrosswordPuzzle {
   title     String
   width     Int
   height    Int
-  grid      Json // cell layout, incl. black squares
-  clues     Json // { across: [...], down: [...] }
-  answers   Json // never sent to client pre-completion
+  grid      Json
+  clues     Json
   author    String?
   source    String?
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
 
-  puzzle Puzzle @relation(fields: [puzzleId], references: [id], onDelete: Cascade)
+  puzzle Puzzle                 @relation(fields: [puzzleId], references: [id], onDelete: Cascade)
+  secret CrosswordPuzzleSecret?
+
+  @@schema("public")
+}
+
+model CrosswordPuzzleSecret {
+  puzzleId String @id
+  answers  Json
+
+  puzzle CrosswordPuzzle @relation(fields: [puzzleId], references: [puzzleId], onDelete: Cascade)
+
+  @@schema("private")
 }
 
 model NonogramPuzzle {
-  id           String   @id @default(cuid())
-  puzzleId     String   @unique
-  width        Int
-  height       Int
-  rowClues     Json
-  colClues     Json
-  solutionGrid Json // never sent to client pre-completion
-  createdAt    DateTime @default(now())
+  id        String   @id @default(cuid())
+  puzzleId  String   @unique
+  width     Int
+  height    Int
+  rowClues  Json
+  colClues  Json
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
 
-  puzzle Puzzle @relation(fields: [puzzleId], references: [id], onDelete: Cascade)
+  puzzle Puzzle                @relation(fields: [puzzleId], references: [id], onDelete: Cascade)
+  secret NonogramPuzzleSecret?
+
+  @@schema("public")
+}
+
+model NonogramPuzzleSecret {
+  puzzleId     String @id
+  solutionGrid Json
+
+  puzzle NonogramPuzzle @relation(fields: [puzzleId], references: [puzzleId], onDelete: Cascade)
+
+  @@schema("private")
 }
 
 model Match {
-  id           String      @id @default(cuid())
-  gameType     GameType
-  // Denormalized from puzzle.difficulty at creation time (by construction
-  // always equal — createMatch() always picks a puzzle of the requested
-  // difficulty) so match-flow code has it at hand without an extra join.
-  difficulty   Difficulty
-  puzzleId     String
-  status       MatchStatus @default(WAITING)
-  startedAt    DateTime?
-  completedAt  DateTime?
-  winnerUserId String?
-  createdAt    DateTime    @default(now())
+  id                 String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gameType           GameType
+  difficulty         Difficulty
+  modeId             String
+  puzzleId           String?
+  status             MatchStatus @default(WAITING)
+  startedAt          DateTime?   @db.Timestamptz(3)
+  completedAt        DateTime?   @db.Timestamptz(3)
+  winnerCompetitorId String?     @db.Uuid
+  detailPurgedAt     DateTime?   @db.Timestamptz(3)
+  createdAt          DateTime    @default(now()) @db.Timestamptz(3)
 
-  puzzle        Puzzle             @relation(fields: [puzzleId], references: [id])
-  winner        User?              @relation("MatchWinner", fields: [winnerUserId], references: [id])
+  puzzle        Puzzle?            @relation(fields: [puzzleId], references: [id], onDelete: SetNull)
+  winner        Competitor?        @relation("MatchWinner", fields: [winnerCompetitorId], references: [id], onDelete: SetNull)
   participants  MatchParticipant[]
   ratingChanges RatingChange[]
   attempts      PuzzleAttempt[]
 
   @@index([gameType, status])
+  @@index([modeId, status])
   @@index([puzzleId])
+  @@schema("public")
 }
 
 model MatchParticipant {
-  id               String            @id @default(cuid())
-  matchId          String
-  userId           String
-  startingRating   Float
-  endingRating     Float?
-  result           MatchResult?
-  completionTimeMs Int?
-  mistakes         Int               @default(0)
-  disconnectStatus DisconnectStatus  @default(CONNECTED)
-  createdAt        DateTime          @default(now())
+  id                   String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  matchId              String            @db.Uuid
+  competitorId         String            @db.Uuid
+  startingRating       Float
+  endingRating         Float?
+  result               MatchResult?
+  completionTimeMs     Int?
+  mistakes             Int?              @default(0)
+  disconnectStatus     DisconnectStatus? @default(CONNECTED)
+  disconnectDeadlineAt DateTime?         @db.Timestamptz(3)
+  detailPurgedAt       DateTime?         @db.Timestamptz(3)
+  createdAt            DateTime          @default(now()) @db.Timestamptz(3)
 
-  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
-  user  User  @relation(fields: [userId], references: [id])
+  match      Match      @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  competitor Competitor @relation(fields: [competitorId], references: [id], onDelete: Restrict)
 
-  @@unique([matchId, userId])
-  @@index([userId])
+  @@unique([matchId, competitorId])
+  @@index([competitorId])
+  @@index([disconnectDeadlineAt])
+  @@schema("public")
 }
 
 model PuzzleAttempt {
-  id         String   @id @default(cuid())
-  userId     String
-  puzzleId   String
-  matchId    String?
-  durationMs Int?
-  completed  Boolean  @default(false)
-  mistakes   Int      @default(0)
-  createdAt  DateTime @default(now())
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  authUserId   String    @db.Uuid
+  assignmentId String    @unique @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  puzzleId     String
+  matchId      String?   @db.Uuid
+  durationMs   Int?
+  completed    Boolean   @default(false)
+  mistakes     Int       @default(0)
+  submittedAt  DateTime? @db.Timestamptz(3)
+  expiresAt    DateTime  @db.Timestamptz(3)
+  createdAt    DateTime  @default(now()) @db.Timestamptz(3)
 
-  user   User    @relation(fields: [userId], references: [id])
-  puzzle Puzzle  @relation(fields: [puzzleId], references: [id])
-  match  Match?  @relation(fields: [matchId], references: [id])
+  account AccountProfile @relation(fields: [authUserId], references: [authUserId], onDelete: Cascade)
+  puzzle  Puzzle         @relation(fields: [puzzleId], references: [id], onDelete: Restrict)
+  match   Match?         @relation(fields: [matchId], references: [id], onDelete: SetNull)
 
-  @@index([userId, puzzleId])
+  @@index([authUserId, createdAt])
   @@index([matchId])
+  @@index([expiresAt])
+  @@schema("public")
 }
 
-// unique(userId, matchId) is the structural guard against double rating awards
-// (CLAUDE.md non-negotiable: "a match must never award rating twice").
 model RatingChange {
-  id           String   @id @default(cuid())
-  userId       String
-  matchId      String
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  competitorId String   @db.Uuid
+  matchId      String   @db.Uuid
   gameType     GameType
   ratingBefore Float
   ratingAfter  Float
   delta        Float
   rdBefore     Float?
   rdAfter      Float?
-  createdAt    DateTime @default(now())
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
 
-  user  User  @relation(fields: [userId], references: [id])
-  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  competitor Competitor @relation(fields: [competitorId], references: [id], onDelete: Restrict)
+  match      Match      @relation(fields: [matchId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, matchId])
-  @@index([userId, gameType, createdAt])
+  @@unique([competitorId, matchId])
+  @@index([competitorId, gameType, createdAt])
+  @@schema("public")
 }
 
-// Rows are ephemeral: deleted on match-found/cancel (Phase 3 logic), so this
-// unique constraint structurally prevents a user from double-queuing for one game.
 model MatchmakingQueueEntry {
-  id         String     @id @default(cuid())
-  userId     String
-  gameType   GameType
-  // Not in SPEC §9's example fields, but Phase 3 matches players who picked
-  // the same difficulty (see CLAUDE.md's Phase 3 notes) — needed to do that.
-  difficulty Difficulty
-  rating     Float
-  region     String?
-  queuedAt   DateTime   @default(now())
+  id           String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  competitorId String     @unique @db.Uuid
+  modeId       String
+  gameType     GameType
+  difficulty   Difficulty
+  rating       Float
+  region       String?
+  queuedAt     DateTime   @default(now()) @db.Timestamptz(3)
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  competitor Competitor @relation(fields: [competitorId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, gameType])
-  @@index([gameType, difficulty, queuedAt])
+  @@index([modeId, queuedAt])
+  @@schema("public")
 }

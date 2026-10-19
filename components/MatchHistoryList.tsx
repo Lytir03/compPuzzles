@@ -10,11 +10,27 @@ export const GAME_TITLES: Record<string, string> = {
   [GameType.NONOGRAM]: "Nonograms",
 };
 
-export const DIFFICULTY_LABELS: Record<string, string> = {
-  EASY: "Easy",
-  MEDIUM: "Medium",
-  HARD: "Hard",
+const DIFFICULTY_LABELS: Record<string, Record<string, string>> = {
+  [GameType.SUDOKU]: {
+    EASY: "6×6 Challenge",
+    MEDIUM: "Easy 9×9",
+    HARD: "Hard 9×9",
+  },
+  [GameType.NONOGRAM]: {
+    EASY: "Quick 5×5",
+    MEDIUM: "Classic 10×10",
+    HARD: "Legacy 15×15",
+  },
+  [GameType.CROSSWORD]: {
+    EASY: "Easy",
+    MEDIUM: "Medium",
+    HARD: "Hard",
+  },
 };
+
+export function getDifficultyLabel(gameType: string, difficulty: string): string {
+  return DIFFICULTY_LABELS[gameType]?.[difficulty] ?? difficulty;
+}
 
 /**
  * Shared match-history rendering for the dashboard, profile, and full history
@@ -62,7 +78,7 @@ export function MatchHistoryList({
                   ) : (
                     <Link
                       href={`/profile/${encodeURIComponent(row.opponentUsername)}`}
-                      className="hover:text-[var(--brand-strong)] hover:underline"
+                      className="hover:text-[var(--brand-text)] hover:underline"
                     >
                       {row.opponentUsername}
                     </Link>
@@ -71,7 +87,7 @@ export function MatchHistoryList({
                 <span className="subtle-text flex flex-wrap items-center gap-x-2 text-xs font-semibold">
                   <span>{GAME_TITLES[row.gameType]}</span>
                   <span aria-hidden="true">·</span>
-                  <span>{DIFFICULTY_LABELS[row.difficulty] ?? row.difficulty}</span>
+                  <span>{getDifficultyLabel(row.gameType, row.difficulty)}</span>
                   {row.completionTimeMs !== null && (
                     <>
                       <span aria-hidden="true">·</span>
@@ -89,7 +105,7 @@ export function MatchHistoryList({
                       </span>
                     </>
                   )}
-                  {row.mistakes > 0 && (
+                  {row.mistakes !== null && row.mistakes > 0 && (
                     <>
                       <span aria-hidden="true">·</span>
                       <span>
@@ -111,7 +127,7 @@ export function MatchHistoryList({
                 <span
                   className={`block rounded-lg px-2.5 py-1 font-black tabular-nums ${
                     row.ratingDelta >= 0
-                      ? "bg-[var(--brand-soft)] text-[var(--brand-strong)]"
+                      ? "bg-[var(--brand-soft)] text-[var(--brand-text)]"
                       : "bg-red-500/10 text-red-600"
                   }`}
                 >
@@ -158,7 +174,7 @@ function ResultChip({ result }: { result: MatchHistoryRow["result"] }) {
       title={result === "ABANDONED" ? "Lost by disconnect" : undefined}
       className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl text-sm font-black ${
         isWin
-          ? "bg-[var(--brand-soft)] text-[var(--brand-strong)]"
+          ? "bg-[var(--brand-soft)] text-[var(--brand-text)]"
           : isLoss
             ? "bg-red-500/10 text-red-600"
             : "bg-[var(--surface-muted)]"

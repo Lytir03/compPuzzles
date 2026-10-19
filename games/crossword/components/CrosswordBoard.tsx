@@ -361,7 +361,7 @@ function ClueList({
                 type="button"
                 onClick={() => onSelect(clue)}
                 className={`block w-full rounded-lg px-2 py-1 text-left font-semibold leading-snug ${
-                  isActive ? "bg-[var(--brand-soft)] text-[var(--brand-strong)]" : "hover:bg-[var(--surface-muted)]"
+                  isActive ? "bg-[var(--brand-soft)] text-[var(--brand-text)]" : "hover:bg-[var(--surface-muted)]"
                 }`}
               >
                 <span className="mr-1 font-black">{clue.number}.</span>

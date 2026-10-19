@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 :root {
+  color-scheme: light;
   --background: #f5f2e8;
   --foreground: #31342d;
   --surface: #fffdf7;
@@ -8,6 +9,7 @@
   --line: #dedacd;
   --brand: #79b74a;
   --brand-strong: #5b9735;
+  --brand-text: #5b9735;
   --brand-soft: #e3f1d4;
   --gold: #f2b94b;
   --blue: #4b91d1;
@@ -18,20 +20,8 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #252824;
-    --foreground: #f5f2e8;
-    --surface: #30342e;
-    --surface-muted: #3a3e37;
-    --line: #494e45;
-    --brand-soft: #34452c;
-    --shadow: #151713;
-  }
+  --font-sans: var(--font-app-sans);
+  --font-mono: var(--font-app-mono);
 }
 
 * {
@@ -39,6 +29,7 @@
 }
 
 html {
+  color-scheme: light;
   scroll-behavior: smooth;
 }
 
@@ -49,7 +40,9 @@ body {
     var(--background);
   background-size: 72px 72px, 96px 96px, auto;
   color: var(--foreground);
-  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  --font-app-sans: "Avenir Next", Avenir, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-app-mono: "SFMono-Regular", Consolas, "Liberation Mono", ui-monospace, monospace;
+  font-family: var(--font-app-sans);
 }
 
 button,
@@ -131,7 +124,7 @@ a {
 }
 
 .eyebrow {
-  color: var(--brand-strong);
+  color: var(--brand-text);
   font-size: 0.75rem;
   font-weight: 800;
   letter-spacing: 0.14em;

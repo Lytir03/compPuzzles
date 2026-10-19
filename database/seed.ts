@@ -1,14 +1,15 @@
+import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { createClient } from "@supabase/supabase-js";
 import { parseCrosswordImport, type CrosswordImportPuzzle } from "@/games/crossword/importFormat";
 import { gridToString } from "@/games/sudoku/engine";
-import { generatePuzzle as generateSudokuPuzzle } from "@/games/sudoku/generator";
-import { generatePuzzle as generateNonogramPuzzle } from "@/games/nonogram/generator";
 import {
-  INITIAL_RATING,
-  INITIAL_RATING_DEVIATION,
-  INITIAL_VOLATILITY,
-} from "@/rating/constants";
+  SUDOKU_VARIANTS,
+  generatePuzzle as generateSudokuPuzzle,
+} from "@/games/sudoku/generator";
+import { generatePuzzle as generateNonogramPuzzle } from "@/games/nonogram/generator";
+import { SUPPORTED_NONOGRAM_DIFFICULTIES } from "@/games/nonogram/generator";
 import { prisma } from "./client";
 import { Difficulty, GameType, PuzzleStatus } from "./generated/client/enums";
 
@@ -20,7 +21,12 @@ const NONOGRAM_TARGET_PER_DIFFICULTY = Number(process.env.NONOGRAM_PUZZLES_PER_D
 
 async function topUpSudokuPuzzles(difficulty: Difficulty) {
   const existing = await prisma.puzzle.count({
-    where: { gameType: GameType.SUDOKU, difficulty, status: PuzzleStatus.PUBLISHED },
+    where: {
+      gameType: GameType.SUDOKU,
+      difficulty,
+      status: PuzzleStatus.PUBLISHED,
+      metadata: { path: ["variant"], equals: SUDOKU_VARIANTS[difficulty] },
+    },
   });
   const toGenerate = SUDOKU_TARGET_PER_DIFFICULTY - existing;
   if (toGenerate <= 0) {
@@ -35,11 +41,12 @@ async function topUpSudokuPuzzles(difficulty: Difficulty) {
       data: {
         gameType: GameType.SUDOKU,
         difficulty,
+        metadata: { variant: SUDOKU_VARIANTS[difficulty] },
         sudoku: {
           create: {
             grid: gridToString(grid),
-            solution: gridToString(solution),
             difficultyScore: clueCount,
+            secret: { create: { solution: gridToString(solution) } },
           },
         },
       },
@@ -73,7 +80,7 @@ async function topUpNonogramPuzzles(difficulty: Difficulty) {
             height: dims.height,
             rowClues,
             colClues,
-            solutionGrid: solution,
+            secret: { create: { solutionGrid: solution } },
           },
         },
       },
@@ -107,6 +114,7 @@ async function importCrosswordPuzzles() {
       data: {
         gameType: GameType.CROSSWORD,
         difficulty: parsed.difficulty,
+        status: PuzzleStatus.ARCHIVED,
         crossword: {
           create: {
             title: parsed.title,
@@ -114,7 +122,7 @@ async function importCrosswordPuzzles() {
             height: parsed.height,
             grid: parsed.mask,
             clues: { across: parsed.across, down: parsed.down },
-            answers: parsed.solution,
+            secret: { create: { answers: parsed.solution } },
             author: parsed.author,
             source: parsed.source,
           },
@@ -125,52 +133,76 @@ async function importCrosswordPuzzles() {
   }
 }
 
-/**
- * Two demo accounts so a two-player match can be tested immediately (SPEC §24
- * lists "seed users" as a dev tool). Sign in as each in two separate browser
- * profiles — the session is an httpOnly cookie, so two tabs in one profile
- * share an identity and can't play each other.
- *
- * Rating rows are created here too: matchmaking and finalizeMatch both look
- * them up with findUnique/findUniqueOrThrow, so a user without them can't queue.
- */
-const DEMO_USERNAMES = ["demo_one", "demo_two"];
+// Demo-only bot opponent (see realtime/bot.ts). Created through Supabase's
+// own signup pipeline — same user_metadata shape as auth/actions.ts:signUp —
+// so the existing on_auth_user_change trigger creates its Competitor,
+// AccountProfile and PlayerGameRating rows exactly like a real signup would.
+// No schema change, and Prisma never touches auth here directly.
+async function seedBotAccount() {
+  if (process.env.NODE_ENV === "production") return;
 
-async function seedDemoUsers() {
-  for (const username of DEMO_USERNAMES) {
-    const user = await prisma.user.upsert({
-      where: { username },
-      update: {},
-      create: { username },
-    });
-
-    for (const gameType of [GameType.SUDOKU, GameType.CROSSWORD, GameType.NONOGRAM]) {
-      await prisma.playerGameRating.upsert({
-        where: { userId_gameType: { userId: user.id, gameType } },
-        update: {},
-        create: {
-          userId: user.id,
-          gameType,
-          rating: INITIAL_RATING,
-          ratingDeviation: INITIAL_RATING_DEVIATION,
-          volatility: INITIAL_VOLATILITY,
-          peakRating: INITIAL_RATING,
-        },
-      });
-    }
-    console.log(`Demo user "${username}": ready.`);
+  const usernameCanonical = process.env.MATCHMAKING_BOT_USERNAME?.trim() || "puzzle_bot";
+  const existing = await prisma.accountProfile.findUnique({ where: { usernameCanonical } });
+  if (existing) {
+    console.log(`Bot account "${usernameCanonical}": already seeded, skipping.`);
+    return;
   }
+
+  let apiUrl: string;
+  let secretKey: string;
+  try {
+    const statusOutput = execFileSync("supabase", ["status", "-o", "env"], { encoding: "utf8" });
+    const local = Object.fromEntries(
+      statusOutput
+        .split(/\r?\n/)
+        .map((line) => line.match(/^([A-Z0-9_]+)="(.*)"$/))
+        .filter((match): match is RegExpMatchArray => match !== null)
+        .map((match) => [match[1], match[2]]),
+    );
+    if (!local.API_URL || !local.SECRET_KEY) throw new Error("missing API_URL/SECRET_KEY");
+    apiUrl = local.API_URL;
+    secretKey = local.SECRET_KEY;
+  } catch {
+    console.log(`Bot account "${usernameCanonical}": local Supabase isn't running, skipping (run \`npm run db:start\` first for the bot fallback demo).`);
+    return;
+  }
+
+  const termsVersion = process.env.CURRENT_TERMS_VERSION?.trim();
+  if (!termsVersion) {
+    console.log(`Bot account "${usernameCanonical}": CURRENT_TERMS_VERSION isn't set, skipping.`);
+    return;
+  }
+
+  const admin = createClient(apiUrl, secretKey);
+  const now = new Date().toISOString();
+  const { error } = await admin.auth.admin.createUser({
+    email: `${usernameCanonical}@bot.comppuzzles.invalid`,
+    password: crypto.randomUUID(),
+    email_confirm: true,
+    user_metadata: {
+      username: usernameCanonical,
+      username_canonical: usernameCanonical,
+      terms_version: termsVersion,
+      terms_accepted_at: now,
+      age_attested_at: now,
+    },
+  });
+  if (error) {
+    console.error(`Bot account "${usernameCanonical}": failed to create —`, error.message);
+    return;
+  }
+  console.log(`Bot account "${usernameCanonical}": created.`);
 }
 
 async function main() {
-  await seedDemoUsers();
   for (const difficulty of [Difficulty.EASY, Difficulty.MEDIUM, Difficulty.HARD]) {
     await topUpSudokuPuzzles(difficulty);
   }
-  for (const difficulty of [Difficulty.EASY, Difficulty.MEDIUM, Difficulty.HARD]) {
+  for (const difficulty of SUPPORTED_NONOGRAM_DIFFICULTIES) {
     await topUpNonogramPuzzles(difficulty);
   }
   await importCrosswordPuzzles();
+  await seedBotAccount();
 }
 
 main()

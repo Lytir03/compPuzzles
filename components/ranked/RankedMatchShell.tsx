@@ -59,6 +59,8 @@ export function RankedMatchShell({
     notice,
     mistakes,
     awaitingVerdict,
+    canRetrySubmission,
+    retrySubmission,
     lastDifficulty,
     joinQueue,
     leaveQueue,
@@ -91,6 +93,9 @@ export function RankedMatchShell({
           </span>
           <h1 className="mt-4 text-xl font-black">Couldn&apos;t enter the arena</h1>
           <p className="subtle-text mt-2 text-sm font-medium">{errorMessage}</p>
+          <button type="button" onClick={() => window.location.reload()} className="game-button mt-5 rounded-xl px-5 py-3 font-black">
+            Try again
+          </button>
         </div>
       </div>
     );
@@ -147,7 +152,7 @@ export function RankedMatchShell({
                     </span>
                     <span className="mt-3 flex items-center justify-between font-black">
                       {detail}
-                      <span className="text-[var(--brand-strong)] transition-transform group-hover:translate-x-1">
+                      <span className="text-[var(--brand-text)] transition-transform group-hover:translate-x-1">
                         →
                       </span>
                     </span>
@@ -257,6 +262,11 @@ export function RankedMatchShell({
 
           {awaitingVerdict && (
             <p className="subtle-text animate-pulse text-sm font-bold">Checking your solution…</p>
+          )}
+          {canRetrySubmission && !awaitingVerdict && (
+            <button type="button" onClick={retrySubmission} disabled={connection !== "online"} className="soft-button rounded-xl px-4 py-2 font-bold disabled:opacity-50">
+              Retry solution check
+            </button>
           )}
 
           {children}
@@ -390,7 +400,7 @@ function ResultScreen({
         {tierAfter !== tierBefore && (
           <p
             className={`mt-3 flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-black ${
-              promoted ? "bg-[var(--brand-soft)] text-[var(--brand-strong)]" : ""
+              promoted ? "bg-[var(--brand-soft)] text-[var(--brand-text)]" : ""
             }`}
           >
             {promoted ? `Promoted out of ${tierBefore} —` : `Dropped to`}{" "}
@@ -426,7 +436,7 @@ function ResultScreen({
         <button
           type="button"
           onClick={onChangeDifficulty}
-          className="mt-3 text-sm font-bold text-[var(--brand-strong)] hover:underline"
+          className="mt-3 text-sm font-bold text-[var(--brand-text)] hover:underline"
         >
           Change difficulty
         </button>
@@ -509,7 +519,7 @@ function RatingChange({
       <p className="mt-1 text-4xl font-black tabular-nums">{displayed}</p>
       <p
         className={`mt-1 text-sm font-black tabular-nums ${
-          delta >= 0 ? "text-[var(--brand-strong)]" : "text-red-600"
+          delta >= 0 ? "text-[var(--brand-text)]" : "text-red-600"
         }`}
       >
         {delta >= 0 ? "+" : ""}

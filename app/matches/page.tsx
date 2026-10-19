@@ -5,7 +5,7 @@ import { GAME_TITLES, MatchHistoryList } from "@/components/MatchHistoryList";
 import { GameType } from "@/database/generated/client/enums";
 import { countMatches, fetchMatchHistory } from "@/database/matchHistory";
 
-const GAME_ORDER = [GameType.SUDOKU, GameType.CROSSWORD, GameType.NONOGRAM];
+const GAME_ORDER: GameType[] = [GameType.SUDOKU, GameType.NONOGRAM];
 const PAGE_SIZE = 20;
 
 function isGameType(value: string | undefined): value is GameType {

@@ -3,25 +3,22 @@ import { Difficulty, GameType, PuzzleStatus } from "@/database/generated/client/
 import type { GameDefinition, PuzzleAssignment } from "@/matchmaking/gameDefinition";
 import { gridFromString } from "./engine";
 import { calculateProgress } from "./progress";
+import { SUDOKU_VARIANTS } from "./generator";
 import { validateCompletion as validateSudokuCompletion } from "./validator";
 
 async function createMatch(
   difficulty: Difficulty,
-  participantUserIds: string[],
+  _participantCompetitorIds: string[],
 ): Promise<PuzzleAssignment> {
+  void _participantCompetitorIds;
   const where = {
     gameType: GameType.SUDOKU,
     difficulty,
     status: PuzzleStatus.PUBLISHED,
+    metadata: { path: ["variant"], equals: SUDOKU_VARIANTS[difficulty] },
   } as const;
 
-  let candidates = await prisma.puzzle.findMany({
-    where: { ...where, attempts: { none: { userId: { in: participantUserIds } } } },
-    select: { id: true },
-  });
-  if (candidates.length === 0) {
-    candidates = await prisma.puzzle.findMany({ where, select: { id: true } });
-  }
+  const candidates = await prisma.puzzle.findMany({ where, select: { id: true } });
   if (candidates.length === 0) {
     throw new Error(`No ${difficulty} Sudoku puzzles available — run "npm run db:seed".`);
   }

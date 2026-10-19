@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getCurrentUser } from "@/auth/currentUser";
 import { RankBadge } from "@/components/RankBadge";
-import { DIFFICULTY_LABELS, GAME_TITLES } from "@/components/MatchHistoryList";
+import { GAME_TITLES, getDifficultyLabel } from "@/components/MatchHistoryList";
 import { fetchMatchDetail, type MatchDetailSide } from "@/database/matchHistory";
 import { formatElapsed } from "@/lib/formatElapsed";
 
@@ -41,7 +41,7 @@ export default async function MatchDetailPage(props: PageProps<"/matches/[id]">)
       <section className="mt-4 flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="eyebrow">
-            {GAME_TITLES[match.gameType]} · {DIFFICULTY_LABELS[match.difficulty] ?? match.difficulty}
+            {GAME_TITLES[match.gameType]} · {getDifficultyLabel(match.gameType, match.difficulty)}
           </p>
           <h1 className="mt-1 text-3xl font-black tracking-[-0.04em]">{outcomeLabel}</h1>
           <p className="subtle-text mt-2 text-sm font-medium">
@@ -79,7 +79,7 @@ export default async function MatchDetailPage(props: PageProps<"/matches/[id]">)
           <Fact label="Game" value={GAME_TITLES[match.gameType]} />
           <Fact
             label="Difficulty"
-            value={DIFFICULTY_LABELS[match.difficulty] ?? match.difficulty}
+            value={getDifficultyLabel(match.gameType, match.difficulty)}
           />
           <Fact
             label="Boards went live"
@@ -103,7 +103,7 @@ export default async function MatchDetailPage(props: PageProps<"/matches/[id]">)
                 : "—"
             }
           />
-          <Fact label="Puzzle" value={match.puzzleId} mono />
+          <Fact label="Puzzle" value={match.puzzleId ?? "Purged after 90 days"} mono />
           <Fact label="Match" value={match.id} mono />
         </dl>
         <p className="subtle-text mt-4 text-xs font-medium leading-5">
@@ -140,7 +140,7 @@ function SideCard({
           </p>
           <Link
             href={`/profile/${encodeURIComponent(side.username)}`}
-            className="mt-0.5 block truncate text-lg font-black hover:text-[var(--brand-strong)] hover:underline"
+            className="mt-0.5 block truncate text-lg font-black hover:text-[var(--brand-text)] hover:underline"
           >
             {side.username}
           </Link>
@@ -156,7 +156,7 @@ function SideCard({
           <span
             className={`mb-1 rounded-lg px-2 py-0.5 text-sm font-black tabular-nums ${
               delta >= 0
-                ? "bg-[var(--brand-soft)] text-[var(--brand-strong)]"
+                ? "bg-[var(--brand-soft)] text-[var(--brand-text)]"
                 : "bg-red-500/10 text-red-600"
             }`}
           >

@@ -17,8 +17,8 @@ const BOB = "user_bob";
 
 interface FakeState {
   matchStatus: MatchStatus;
-  ratingUpdates: { userId: string; data: Record<string, unknown> }[];
-  ratingChangeCreates: { userId: string; matchId: string }[];
+  ratingUpdates: { competitorId: string; data: Record<string, unknown> }[];
+  ratingChangeCreates: { competitorId: string; matchId: string }[];
   participantUpdates: { id: string; data: Record<string, unknown> }[];
   transactionCount: number;
   completedTransactions: number;
@@ -26,15 +26,15 @@ interface FakeState {
 
 let state: FakeState;
 
-function participantRow(userId: string, completionTimeMs: number | null, username: string) {
+function participantRow(competitorId: string, completionTimeMs: number | null, username: string) {
   return {
-    id: `participant_${userId}`,
-    userId,
+    id: `participant_${competitorId}`,
+    competitorId,
     matchId: MATCH_ID,
     startingRating: 1500,
     completionTimeMs,
     mistakes: 0,
-    user: { username },
+    competitor: { profile: { username } },
   };
 }
 
@@ -60,8 +60,8 @@ interface TxBuffer {
 function makeTx(buffer: TxBuffer) {
   return {
     playerGameRating: {
-      findUniqueOrThrow: async ({ where }: { where: { userId_gameType: { userId: string } } }) => ({
-        userId: where.userId_gameType.userId,
+      findUniqueOrThrow: async ({ where }: { where: { competitorId_gameType: { competitorId: string } } }) => ({
+        competitorId: where.competitorId_gameType.competitorId,
         rating: 1500,
         ratingDeviation: 200,
         volatility: 0.06,
@@ -71,10 +71,10 @@ function makeTx(buffer: TxBuffer) {
         where,
         data,
       }: {
-        where: { userId_gameType: { userId: string } };
+        where: { competitorId_gameType: { competitorId: string } };
         data: Record<string, unknown>;
       }) => {
-        buffer.ratingUpdates.push({ userId: where.userId_gameType.userId, data });
+        buffer.ratingUpdates.push({ competitorId: where.competitorId_gameType.competitorId, data });
       },
     },
     match: {
@@ -87,13 +87,13 @@ function makeTx(buffer: TxBuffer) {
       },
     },
     ratingChange: {
-      create: async ({ data }: { data: { userId: string; matchId: string } }) => {
+      create: async ({ data }: { data: { competitorId: string; matchId: string } }) => {
         const duplicate = [...state.ratingChangeCreates, ...buffer.ratingChangeCreates].some(
-          (c) => c.userId === data.userId && c.matchId === data.matchId,
+          (c) => c.competitorId === data.competitorId && c.matchId === data.matchId,
         );
         // Stands in for @@unique([userId, matchId]) — the DB-level backstop.
         if (duplicate) throw new Error("Unique constraint failed on RatingChange");
-        buffer.ratingChangeCreates.push({ userId: data.userId, matchId: data.matchId });
+        buffer.ratingChangeCreates.push({ competitorId: data.competitorId, matchId: data.matchId });
       },
     },
     matchParticipant: {
@@ -118,8 +118,10 @@ vi.mock("@/database/client", () => ({
       }),
     },
     matchParticipant: {
-      findUniqueOrThrow: async ({ where }: { where: { matchId_userId: { userId: string } } }) => {
-        const found = participants.find((p) => p.userId === where.matchId_userId.userId);
+      findUniqueOrThrow: async ({ where }: { where: { matchId_competitorId: { competitorId: string } } }) => {
+        const found = participants.find(
+          (p) => p.competitorId === where.matchId_competitorId.competitorId,
+        );
         if (!found) throw new Error("participant not found");
         return { ...found, disconnectStatus: "CONNECTED" };
       },
@@ -189,7 +191,7 @@ describe("finalizeMatch", () => {
 
     expect(state.matchStatus).toBe(MatchStatus.COMPLETED);
     expect(state.ratingChangeCreates).toHaveLength(2);
-    expect(state.ratingUpdates.map((u) => u.userId).sort()).toEqual([ALICE, BOB]);
+    expect(state.ratingUpdates.map((u) => u.competitorId).sort()).toEqual([ALICE, BOB]);
 
     const results = state.participantUpdates.map((u) => u.data.result);
     expect(results).toContain(MatchResult.WIN);

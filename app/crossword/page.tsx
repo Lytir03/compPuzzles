@@ -1,14 +1,6 @@
-import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/auth/currentUser";
-import { CrosswordPractice } from "@/games/crossword/components/CrosswordPractice";
+import { notFound } from "next/navigation";
 
-export default async function CrosswordPracticePage() {
-  const user = await getCurrentUser();
-  if (!user) redirect("/sign-in");
-
-  return (
-    <main className="mx-auto w-full max-w-3xl flex-1 px-6">
-      <CrosswordPractice />
-    </main>
-  );
+/** Crossword content is archived for the beta and deliberately unroutable. */
+export default function CrosswordPracticePage() {
+  notFound();
 }

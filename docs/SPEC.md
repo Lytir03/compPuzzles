@@ -279,7 +279,7 @@ Store at minimum:
 
 Initial provisional rating:
 
-1500.
+400.
 
 Players with few games should have higher rating uncertainty.
 
@@ -708,15 +708,14 @@ Supabase Realtime
 
 Select one and explain the choice.
 
-**Decisions locked in:** Auth = Clerk. Realtime = Socket.IO.
+**Decisions locked in:** Auth = Supabase email/password with mandatory email
+verification and a server-only Next.js BFF. Realtime = Socket.IO with one-use
+Ed25519 admission tickets. Crossword is archived and unavailable.
 
-Deployment: **local only for now.** This build is for demoing / having a
-working project on one machine — Next.js dev server, Socket.IO process, and
-Postgres (local install or Docker) all run on localhost. No hosting decisions
-needed yet. When there's a real reason to deploy, revisit: Vercel can host
-the Next.js side, but Socket.IO needs a persistent process, which Vercel's
-serverless functions don't support — that'll mean a separate always-on
-service (e.g. Railway/Fly.io) at that point, not before.
+Deployment target: **public beta without an SLA**. Netlify hosts the web/BFF,
+Supabase EU hosts Auth/Postgres/Data API, and one Railway EU process hosts
+Socket.IO. Upstash provides distributed security state. Advertising stays
+disabled until a separate legal/consent release gate.
 
 Avoid unnecessary microservices.
 

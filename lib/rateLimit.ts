@@ -39,12 +39,11 @@ export class RateLimiter {
 
   /**
    * Consumes one token for `key` under `ruleName`. An unknown rule name is
-   * allowed through rather than throwing — a limiter must never be the thing
-   * that breaks a request path.
+   * denied without throwing. A misspelled security rule must fail closed.
    */
   check(ruleName: string, key: string, now: number = Date.now()): RateLimitDecision {
     const rule = this.rules[ruleName];
-    if (!rule) return { allowed: true, retryAfterMs: 0 };
+    if (!rule) return { allowed: false, retryAfterMs: 60_000 };
 
     const bucketKey = `${ruleName}:${key}`;
     const bucket = this.buckets.get(bucketKey) ?? { tokens: rule.burst, lastRefillMs: now };
@@ -93,15 +92,7 @@ export class RateLimiter {
 export const REALTIME_RATE_LIMITS: Record<string, RateLimitRule> = {
   "queue:join": { burst: 5, refillPerSecond: 0.5 },
   "queue:leave": { burst: 5, refillPerSecond: 0.5 },
+  "match:sync": { burst: 6, refillPerSecond: 0.5 },
   "match:progress": { burst: 40, refillPerSecond: 10 },
   "match:submit": { burst: 6, refillPerSecond: 1 },
 };
-
-/** Server-action limits: puzzle handout, practice grading, and passwordless login. */
-export const ACTION_RATE_LIMITS: Record<string, RateLimitRule> = {
-  "practice:start": { burst: 10, refillPerSecond: 0.5 },
-  "practice:submit": { burst: 15, refillPerSecond: 1 },
-  login: { burst: 8, refillPerSecond: 0.2 },
-};
-
-export const actionRateLimiter = new RateLimiter(ACTION_RATE_LIMITS);

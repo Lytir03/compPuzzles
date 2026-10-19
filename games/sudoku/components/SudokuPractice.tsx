@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { startPracticePuzzle, submitPracticeSolution } from "../actions";
 import { Difficulty } from "@/database/generated/client/enums";
 import { formatElapsed, gridToString } from "../engine";
@@ -15,22 +15,22 @@ const DIFFICULTIES: {
 }[] = [
   {
     value: Difficulty.EASY,
-    label: "Easy",
-    detail: "A calm warm-up",
-    tone: "bg-[#e2f1d4] text-[#47752d]",
-    mark: "●",
+    label: "6×6 Challenge",
+    detail: "Fast grid · fewer clues",
+    tone: "bg-[#dcecf4] text-[#35657e]",
+    mark: "⚡",
   },
   {
     value: Difficulty.MEDIUM,
-    label: "Medium",
-    detail: "A proper challenge",
+    label: "Easy 9×9",
+    detail: "Classic grid · more clues",
     tone: "bg-[#fff0c9] text-[#8a6419]",
     mark: "◆",
   },
   {
     value: Difficulty.HARD,
-    label: "Hard",
-    detail: "Bring your best",
+    label: "Hard 9×9",
+    detail: "Sparse clues · bring your best",
     tone: "bg-[#fde0db] text-[#9d4134]",
     mark: "▲",
   },
@@ -40,8 +40,9 @@ type State =
   | { status: "idle" }
   | { status: "loading"; difficulty: Difficulty }
   | { status: "error"; difficulty: Difficulty; message: string }
-  | { status: "playing"; difficulty: Difficulty; puzzleId: string; grid: string }
-  | { status: "submitting"; difficulty: Difficulty; puzzleId: string; grid: string }
+  | { status: "playing"; difficulty: Difficulty; assignmentId: string; grid: string }
+  | { status: "submitting"; difficulty: Difficulty; assignmentId: string; grid: string }
+  | { status: "submit-error"; difficulty: Difficulty; assignmentId: string; grid: string; message: string }
   | {
       status: "result";
       difficulty: Difficulty;
@@ -52,11 +53,14 @@ type State =
 export function SudokuPractice() {
   const [state, setState] = useState<State>({ status: "idle" });
 
+  const lastSubmission = useRef<{ grid: number[]; elapsedMs: number } | null>(null);
+
   async function start(difficulty: Difficulty) {
+    lastSubmission.current = null;
     setState({ status: "loading", difficulty });
     try {
       const puzzle = await startPracticePuzzle(difficulty);
-      setState({ status: "playing", difficulty, puzzleId: puzzle.puzzleId, grid: puzzle.grid });
+      setState({ status: "playing", difficulty, assignmentId: puzzle.assignmentId, grid: puzzle.grid });
     } catch (error) {
       setState({
         status: "error",
@@ -68,13 +72,23 @@ export function SudokuPractice() {
 
   async function handleSubmit(
     difficulty: Difficulty,
-    puzzleId: string,
+    assignmentId: string,
     grid: number[],
     elapsedMs: number,
   ) {
-    setState({ status: "submitting", difficulty, puzzleId, grid: gridToString(grid) });
-    const result = await submitPracticeSolution(puzzleId, gridToString(grid), elapsedMs);
-    setState({ status: "result", difficulty, correct: result.correct, elapsedMs });
+    lastSubmission.current = { grid: [...grid], elapsedMs };
+    // Keep the original givens/clues while the board stays mounted.
+    setState((previous) => ("grid" in previous ? { ...previous, status: "submitting" } : previous));
+    try {
+      const result = await submitPracticeSolution(assignmentId, gridToString(grid), elapsedMs);
+      setState({ status: "result", difficulty, correct: result.correct, elapsedMs });
+    } catch (error) {
+      setState((previous) => ("grid" in previous ? {
+        ...previous,
+        status: "submit-error",
+        message: error instanceof Error ? error.message : "Could not check your solution. Try again.",
+      } : previous));
+    }
   }
 
   if (state.status === "idle" || state.status === "loading" || state.status === "error") {
@@ -93,7 +107,7 @@ export function SudokuPractice() {
                 </p>
               </div>
               <span className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl bg-[#8dca59] text-3xl font-black text-[#284717] shadow-[0_5px_0_#5a9237]">
-                9
+                6
               </span>
             </div>
           </div>
@@ -123,7 +137,7 @@ export function SudokuPractice() {
               ))}
             </div>
             {state.status === "loading" && (
-              <p className="mt-5 animate-pulse text-center text-sm font-bold text-[var(--brand-strong)]">
+              <p className="mt-5 animate-pulse text-center text-sm font-bold text-[var(--brand-text)]">
                 Building your puzzle…
               </p>
             )}
@@ -138,26 +152,42 @@ export function SudokuPractice() {
     );
   }
 
-  if (state.status === "playing" || state.status === "submitting") {
+  if (state.status === "playing" || state.status === "submitting" || state.status === "submit-error") {
     return (
       <div className="flex flex-col items-center gap-6 py-6 sm:py-8">
         <div className="flex w-full max-w-[34rem] items-center justify-between gap-4 rounded-2xl bg-[var(--surface-muted)] px-4 py-3">
           <div>
             <p className="eyebrow">Solo practice</p>
             <h1 className="font-black">
-              {state.difficulty.charAt(0) + state.difficulty.slice(1).toLowerCase()} Sudoku
+              {state.difficulty === Difficulty.EASY
+                ? "6×6 Challenge Sudoku"
+                : state.difficulty === Difficulty.MEDIUM
+                  ? "Easy 9×9 Sudoku"
+                  : "Hard 9×9 Sudoku"}
             </h1>
           </div>
-          <span className="rounded-xl bg-[var(--brand-soft)] px-3 py-1.5 text-xs font-extrabold text-[var(--brand-strong)]">
+          <span className="rounded-xl bg-[var(--brand-soft)] px-3 py-1.5 text-xs font-extrabold text-[var(--brand-text)]">
             No rating
           </span>
         </div>
+        {state.status === "submit-error" && (
+          <div role="alert" className="w-full max-w-lg rounded-xl bg-red-500/10 p-4 text-center text-sm font-bold">
+            <p>{state.message}</p>
+            <div className="mt-3 flex justify-center gap-3">
+              <button type="button" className="soft-button rounded-xl px-4 py-2" onClick={() => {
+                const submission = lastSubmission.current;
+                if (submission) void handleSubmit(state.difficulty, state.assignmentId, submission.grid, submission.elapsedMs);
+              }}>Retry check</button>
+              <button type="button" className="soft-button rounded-xl px-4 py-2" onClick={() => start(state.difficulty)}>New puzzle</button>
+            </div>
+          </div>
+        )}
         <SudokuBoard
-          key={state.puzzleId}
+          key={state.assignmentId}
           initialGrid={state.grid}
-          disabled={state.status === "submitting"}
+          disabled={state.status !== "playing"}
           onSubmit={(grid, elapsedMs) =>
-            handleSubmit(state.difficulty, state.puzzleId, grid, elapsedMs)
+            handleSubmit(state.difficulty, state.assignmentId, grid, elapsedMs)
           }
         />
       </div>

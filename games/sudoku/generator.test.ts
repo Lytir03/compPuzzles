@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Difficulty } from "@/database/generated/client/enums";
-import { CELL_COUNT, EMPTY } from "./engine";
+import { BLITZ_RULES, CELL_COUNT, EMPTY } from "./engine";
 import { countSolutions, findConflicts, isGridFull, solve } from "./validator";
 import { DIFFICULTY_TARGET_CLUES, generatePuzzle, generateSolvedGrid } from "./generator";
 
@@ -45,3 +45,28 @@ describe.each([Difficulty.EASY, Difficulty.MEDIUM, Difficulty.HARD])(
     });
   },
 );
+
+describe("6×6 Blitz generation", () => {
+  it("uses a 2×3-box board containing only digits 1 through 6", () => {
+    const { grid, solution, rules } = generatePuzzle(Difficulty.EASY);
+    expect(rules).toEqual(BLITZ_RULES);
+    expect(grid).toHaveLength(36);
+    expect(solution).toHaveLength(36);
+    expect(Math.max(...solution)).toBe(6);
+    expect(Math.min(...solution)).toBe(1);
+    expect(countSolutions(grid, 2)).toBe(1);
+  });
+
+  it("uses materially fewer clues than the previous easy 6×6 set", () => {
+    const { clueCount } = generatePuzzle(Difficulty.EASY);
+    expect(clueCount).toBeLessThanOrEqual(13);
+  });
+
+  it("uses an easier clue target for 9×9 Medium than 9×9 Hard", () => {
+    expect(generatePuzzle(Difficulty.MEDIUM).grid).toHaveLength(81);
+    expect(generatePuzzle(Difficulty.HARD).grid).toHaveLength(81);
+    expect(DIFFICULTY_TARGET_CLUES[Difficulty.MEDIUM]).toBeGreaterThan(
+      DIFFICULTY_TARGET_CLUES[Difficulty.HARD],
+    );
+  });
+});

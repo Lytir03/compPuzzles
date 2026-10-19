@@ -11,8 +11,8 @@ describe("getRankTier", () => {
     expect(getRankTier(1000).name).toBe("Silver");
   });
 
-  it("returns Platinum at the default initial rating of 1500", () => {
-    expect(getRankTier(1500).name).toBe("Platinum");
+  it("starts a new 400-rated player in Bronze", () => {
+    expect(getRankTier(400).name).toBe("Bronze");
   });
 
   it("returns Grandmaster at its floor and far above it", () => {

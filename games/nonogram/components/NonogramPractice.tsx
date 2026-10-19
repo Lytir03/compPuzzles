@@ -1,33 +1,36 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Difficulty } from "@/database/generated/client/enums";
 import { startPracticePuzzle, submitPracticeSolution } from "../actions";
 import { decodePuzzlePayload, encodeGrid, formatElapsed, type NonogramGrid } from "../engine";
 import { NonogramBoard } from "./NonogramBoard";
 
 const DIFFICULTIES: { value: Difficulty; label: string; detail: string }[] = [
-  { value: Difficulty.EASY, label: "Easy", detail: "5×5 warm-up" },
-  { value: Difficulty.MEDIUM, label: "Medium", detail: "10×10 challenge" },
-  { value: Difficulty.HARD, label: "Hard", detail: "15×15 marathon" },
+  { value: Difficulty.EASY, label: "Quick 5×5", detail: "Small, readable warm-up" },
+  { value: Difficulty.MEDIUM, label: "Classic 10×10", detail: "Longer logic challenge" },
 ];
 
 type State =
   | { status: "idle" }
   | { status: "loading"; difficulty: Difficulty }
   | { status: "error"; difficulty: Difficulty; message: string }
-  | { status: "playing"; difficulty: Difficulty; puzzleId: string; payload: string }
-  | { status: "submitting"; difficulty: Difficulty; puzzleId: string; payload: string }
+  | { status: "playing"; difficulty: Difficulty; assignmentId: string; payload: string }
+  | { status: "submitting"; difficulty: Difficulty; assignmentId: string; payload: string }
+  | { status: "submit-error"; difficulty: Difficulty; assignmentId: string; payload: string; message: string }
   | { status: "result"; difficulty: Difficulty; correct: boolean; elapsedMs: number };
 
 export function NonogramPractice() {
   const [state, setState] = useState<State>({ status: "idle" });
 
+  const lastSubmission = useRef<{ grid: number[]; elapsedMs: number } | null>(null);
+
   async function start(difficulty: Difficulty) {
+    lastSubmission.current = null;
     setState({ status: "loading", difficulty });
     try {
       const puzzle = await startPracticePuzzle(difficulty);
-      setState({ status: "playing", difficulty, puzzleId: puzzle.puzzleId, payload: puzzle.payload });
+      setState({ status: "playing", difficulty, assignmentId: puzzle.assignmentId, payload: puzzle.payload });
     } catch (error) {
       setState({
         status: "error",
@@ -39,13 +42,23 @@ export function NonogramPractice() {
 
   async function handleSubmit(
     difficulty: Difficulty,
-    puzzleId: string,
+    assignmentId: string,
     grid: NonogramGrid,
     elapsedMs: number,
   ) {
-    setState({ status: "submitting", difficulty, puzzleId, payload: encodeGrid(grid) });
-    const result = await submitPracticeSolution(puzzleId, encodeGrid(grid), elapsedMs);
-    setState({ status: "result", difficulty, correct: result.correct, elapsedMs });
+    lastSubmission.current = { grid: [...grid], elapsedMs };
+    // Keep the original givens/clues while the board stays mounted.
+    setState((previous) => ("payload" in previous ? { ...previous, status: "submitting" } : previous));
+    try {
+      const result = await submitPracticeSolution(assignmentId, encodeGrid(grid), elapsedMs);
+      setState({ status: "result", difficulty, correct: result.correct, elapsedMs });
+    } catch (error) {
+      setState((previous) => ("payload" in previous ? {
+        ...previous,
+        status: "submit-error",
+        message: error instanceof Error ? error.message : "Could not check your solution. Try again.",
+      } : previous));
+    }
   }
 
   if (state.status === "idle" || state.status === "loading" || state.status === "error") {
@@ -60,7 +73,7 @@ export function NonogramPractice() {
                 </p>
                 <h1 className="mt-2 text-3xl font-black tracking-[-0.04em]">Nonogram practice</h1>
                 <p className="mt-2 max-w-lg text-sm font-medium leading-6 text-white/70">
-                  Fill in the picture using the row and column clues. No rating at stake.
+                  Every grid has one solution and yields to logic alone. No rating at stake.
                 </p>
               </div>
               <span className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl bg-[#f4c45f] text-3xl font-black text-[#543c08] shadow-[0_5px_0_#c48c29]">
@@ -74,7 +87,7 @@ export function NonogramPractice() {
               <h2 className="text-lg font-black">Choose a size</h2>
               <span className="subtle-text text-xs font-bold">No rating at stake</span>
             </div>
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               {DIFFICULTIES.map(({ value, label, detail }) => (
                 <button
                   key={value}
@@ -89,7 +102,7 @@ export function NonogramPractice() {
               ))}
             </div>
             {state.status === "loading" && (
-              <p className="mt-5 animate-pulse text-center text-sm font-bold text-[var(--brand-strong)]">
+              <p className="mt-5 animate-pulse text-center text-sm font-bold text-[var(--brand-text)]">
                 Building your puzzle…
               </p>
             )}
@@ -104,7 +117,7 @@ export function NonogramPractice() {
     );
   }
 
-  if (state.status === "playing" || state.status === "submitting") {
+  if (state.status === "playing" || state.status === "submitting" || state.status === "submit-error") {
     const { width, height, rowClues, colClues } = decodePuzzlePayload(state.payload);
     return (
       <div className="flex flex-col items-center gap-6 py-6 sm:py-8">
@@ -115,18 +128,30 @@ export function NonogramPractice() {
               {width}×{height} Nonogram
             </h1>
           </div>
-          <span className="rounded-xl bg-[var(--brand-soft)] px-3 py-1.5 text-xs font-extrabold text-[var(--brand-strong)]">
-            No rating
+          <span className="rounded-xl bg-[var(--brand-soft)] px-3 py-1.5 text-xs font-extrabold text-[var(--brand-text)]">
+            Unique · no guessing
           </span>
         </div>
+        {state.status === "submit-error" && (
+          <div role="alert" className="w-full max-w-lg rounded-xl bg-red-500/10 p-4 text-center text-sm font-bold">
+            <p>{state.message}</p>
+            <div className="mt-3 flex justify-center gap-3">
+              <button type="button" className="soft-button rounded-xl px-4 py-2" onClick={() => {
+                const submission = lastSubmission.current;
+                if (submission) void handleSubmit(state.difficulty, state.assignmentId, submission.grid, submission.elapsedMs);
+              }}>Retry check</button>
+              <button type="button" className="soft-button rounded-xl px-4 py-2" onClick={() => start(state.difficulty)}>New puzzle</button>
+            </div>
+          </div>
+        )}
         <NonogramBoard
-          key={state.puzzleId}
+          key={state.assignmentId}
           width={width}
           height={height}
           rowClues={rowClues}
           colClues={colClues}
-          disabled={state.status === "submitting"}
-          onSubmit={(grid, elapsedMs) => handleSubmit(state.difficulty, state.puzzleId, grid, elapsedMs)}
+          disabled={state.status !== "playing"}
+          onSubmit={(grid, elapsedMs) => handleSubmit(state.difficulty, state.assignmentId, grid, elapsedMs)}
         />
       </div>
     );

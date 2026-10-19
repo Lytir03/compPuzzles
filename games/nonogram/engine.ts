@@ -90,7 +90,7 @@ export function isValidGrid(grid: unknown, dims: NonogramDimensions): grid is No
   return (
     Array.isArray(grid) &&
     grid.length === dims.width * dims.height &&
-    grid.every((cell) => cell === UNDETERMINED || cell === FILLED || cell === MARKED_EMPTY)
+    Array.from(grid).every((cell) => cell === UNDETERMINED || cell === FILLED || cell === MARKED_EMPTY)
   );
 }
 

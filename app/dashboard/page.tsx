@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/auth/currentUser";
+import { AdSlot } from "@/components/ads/AdSlot";
 import { GameRatingCard } from "@/components/GameRatingCard";
 import { LeaderboardPreview } from "@/components/LeaderboardPreview";
 import { GAME_TITLES, MatchHistoryList } from "@/components/MatchHistoryList";
@@ -8,18 +9,16 @@ import { GameType } from "@/database/generated/client/enums";
 import { fetchStandings } from "@/database/leaderboard";
 import { fetchMatchHistory } from "@/database/matchHistory";
 
-const GAME_ORDER = [GameType.SUDOKU, GameType.CROSSWORD, GameType.NONOGRAM];
+const GAME_ORDER: GameType[] = [GameType.SUDOKU, GameType.NONOGRAM];
 
 const PRACTICE_HREFS: Partial<Record<string, string>> = {
   [GameType.SUDOKU]: "/sudoku",
   [GameType.NONOGRAM]: "/nonogram",
-  [GameType.CROSSWORD]: "/crossword",
 };
 
 const RANKED_HREFS: Partial<Record<string, string>> = {
   [GameType.SUDOKU]: "/sudoku/ranked",
   [GameType.NONOGRAM]: "/nonogram/ranked",
-  [GameType.CROSSWORD]: "/crossword/ranked",
 };
 
 export default async function DashboardPage() {
@@ -91,7 +90,13 @@ export default async function DashboardPage() {
             />
           );
         })}
+        <GameRatingCard title="Minesweeper" practiceHref="/minesweeper" />
       </div>
+
+      <AdSlot
+        placement="dashboard-between-games-and-history"
+        className="mt-10"
+      />
 
       <section className="mt-12">
         <div className="flex items-center justify-between gap-4">
@@ -107,7 +112,7 @@ export default async function DashboardPage() {
       </section>
 
       <div className="pb-8">
-        <LeaderboardPreview gameType={previewGame} rows={standings} viewerId={user.id} />
+        <LeaderboardPreview gameType={previewGame} rows={standings} viewerId={user.username} />
       </div>
     </main>
   );

@@ -1,0 +1,29 @@
+[build]
+  command = "npm run db:generate && npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "22.23.2"
+  NPM_FLAGS = "--no-audit --no-fund"
+
+[functions]
+  node_bundler = "esbuild"
+
+[context.production]
+  command = "npm run db:generate && node scripts/validate-build-env.mjs && npm run build"
+
+[context.deploy-preview]
+  command = "npm run db:generate && npm run build"
+
+[context.branch-deploy]
+  command = "npm run db:generate && npm run build"
+
+[[headers]]
+  for = "/api/health"
+  [headers.values]
+    Cache-Control = "no-store, max-age=0"
+
+[[headers]]
+  for = "/health/*"
+  [headers.values]
+    Cache-Control = "no-store, max-age=0"

@@ -1,32 +1,40 @@
 import "server-only";
-import { cookies } from "next/headers";
-import { createSignedToken, verifySignedToken } from "@/lib/signedToken";
-import { SESSION_COOKIE_NAME, SESSION_TOKEN_PURPOSE } from "./sessionCookie";
 
-const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+import type { User } from "@supabase/supabase-js";
+import { createSupabaseServerClient } from "./supabase";
 
+export interface VerifiedAuthContext {
+  user: User;
+  sessionId: string | null;
+}
+
+function readSessionId(claims: unknown): string | null {
+  if (!claims || typeof claims !== "object") return null;
+  const value = (claims as Record<string, unknown>).session_id;
+  return typeof value === "string" && value.length > 0 && value.length <= 128 ? value : null;
+}
+
+export function isEmailVerified(user: User): boolean {
+  return Boolean(user.email && user.email_confirmed_at);
+}
+
+/** Network-verified identity for sensitive operations. */
+export async function getVerifiedAuthContext(options: { cookiesWritable?: boolean } = {}): Promise<VerifiedAuthContext | null> {
+  const supabase = await createSupabaseServerClient(options);
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data.user || !isEmailVerified(data.user)) return null;
+
+  const claimsResult = await supabase.auth.getClaims();
+  const claims = claimsResult.data?.claims;
+  return { user: data.user, sessionId: readSessionId(claims) };
+}
+
+/** Compatibility seam for code that needs the authenticated Supabase UUID. */
 export async function getSessionUserId(): Promise<string | null> {
-  const store = await cookies();
-  const raw = store.get(SESSION_COOKIE_NAME)?.value;
-  if (!raw) return null;
-  // Signed, so a cookie hand-edited to another player's userId is rejected
-  // rather than honoured. See lib/signedToken.ts.
-  return verifySignedToken(raw, SESSION_TOKEN_PURPOSE);
+  return (await getVerifiedAuthContext())?.user.id ?? null;
 }
 
-export async function setSessionUserId(userId: string) {
-  const store = await cookies();
-  store.set(SESSION_COOKIE_NAME, createSignedToken(userId, SESSION_TOKEN_PURPOSE, SESSION_TTL_MS), {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    // No `secure` flag — this only ever runs over http://localhost. Revisit
-    // once this deploys somewhere with TLS.
-    maxAge: SESSION_TTL_MS / 1000,
-  });
-}
-
-export async function clearSession() {
-  const store = await cookies();
-  store.delete(SESSION_COOKIE_NAME);
+export async function clearSession(scope: "local" | "global" | "others" = "local") {
+  const supabase = await createSupabaseServerClient({ cookiesWritable: true });
+  await supabase.auth.signOut({ scope });
 }

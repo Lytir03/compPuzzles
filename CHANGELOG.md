@@ -1,5 +1,35 @@
 # Changelog
 
+## Unreleased
+
+- Patch Next.js to 16.4.2, Prisma to 7.10.1, Engine.IO/sharp and Vitest/YAML tooling; clear all production dependency audit findings.
+- Sweep fixes: repair the production build, enforce confirmed-email authentication and request origins, recover practice submissions, and stabilize ranked queue/reconnect/submission state.
+- Fix drawn-match details, malformed profile paths, invalid grid values, keyboard puzzle controls and clipped mobile Sudoku input.
+- Disable unused Supabase GraphQL with a forward migration; preserve the existing development database and verify clean migrations in isolation.
+- Add real Sudoku/Nonogram ranked integration tests to CI, fix secret-scanner false positives and withhold matching secret values from output.
+- Record the review, applied fixes, verification and deployment limits in `docs/APP_SWEEP_2026-10-18.md`.
+
+- Replace the legacy username-only impersonation flow with server-only Supabase email/password auth: mandatory email verification, password recovery/change, logout revocation, account export and atomic deletion.
+- Add verified-account provisioning with a private pending signup, a non-public `Competitor` identity, an `AccountProfile` mapping, case-insensitive reserved-name protection and fresh 400 Elo ladders for Sudoku and Nonogram.
+- Make Supabase SQL migrations the sole schema authority; add FORCE RLS, least-privilege realtime/puzzle-writer/backup roles, `security_invoker` Data API views and private puzzle-solution tables.
+- Replace broad session credentials in Socket.IO with 90-second Ed25519 admission tickets that are audience-bound, one-use and checked against distributed Upstash revocation markers.
+- Harden ranked integrity with a central mode whitelist, event-driven matchmaking, one global queue entry, pre-countdown rejection, atomic first-completion claims and restart-safe disconnect recovery.
+- Issue opaque, expiring practice assignments for Sudoku and Nonogram; keep guest attempts out of the user database and Minesweeper entirely local/practice-only.
+- Add Netlify/Railway production configuration, non-root realtime image, liveness/readiness checks, graceful drain, strict environment validation, nonce CSP/security headers and privacy-redacted Sentry error reporting.
+- Add encrypted pseudonymous database backups, 90-day detail retention, protected production migrations, 84 database/RLS contract checks, CodeQL, dependency/secret/unsafe-SQL checks and reproducible CI.
+- Add vendor-neutral reserved ad slots with all ad SDKs disabled for beta, plus bilingual privacy/terms/cookie/contact pages, cookie preferences and `security.txt`.
+- Standardize the entire app on the light palette, including clearer fixed-color Nonogram and Minesweeper boards.
+- Reset every rating ladder to a 400 provisional start and make 400 the default for new players.
+- Rebalance Sudoku into a challenging 6×6, easy 9×9, and hard 9×9, each backed by a separately versioned puzzle set.
+- Limit launch Nonogram queues to the common 5×5 and 10×10 formats while retaining logic-only unique generation.
+- Add Sudoku candidate notes with conventional positional digits, a touch-friendly Notes toggle, an N-key shortcut, and automatic peer cleanup when a value is committed.
+- Add 6×6 Sudoku Blitz using digits 1–6 and 2×3 boxes, presented as a 2–3 minute ranked option.
+- Give Sudoku cells fixed, high-contrast colors and boundaries that render identically in light and dark mode.
+- Generate Nonograms that are uniquely solvable through forced line deductions, with no guessing.
+- Add reproducible Minesweeper generation with a protected opening and logic-only solvability validation.
+- Add playable no-guess Minesweeper practice for all three difficulties, including touch-friendly flagging and chording.
+- Replace Crossword promotions, cards, and filters with Minesweeper while preserving the Crossword implementation for possible later use.
+
 ## 2026-08-12 — Phase 7 completion: mobile nav, missing routes, result motion
 
 Finishes the Phase 7 items the security-focused pass left open. Nothing here

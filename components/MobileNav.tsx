@@ -74,6 +74,7 @@ export function MobileNav({ username }: { username: string }) {
           <MobileNavLink href="/leaderboard" label="Leaderboard" icon="🏆" onNavigate={close} />
           <MobileNavLink href="/matches" label="Match history" icon="📜" onNavigate={close} />
           <MobileNavLink href={profileHref} label="Your profile" icon="◆" onNavigate={close} />
+          <MobileNavLink href="/account" label="Account settings" icon="⚙" onNavigate={close} />
           <div className="my-1 border-t border-[var(--line)]" />
           <form action={logout}>
             <SubmitButton

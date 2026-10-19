@@ -58,7 +58,7 @@ export function LeaderboardPreview({
                 </span>
                 <Link
                   href={`/profile/${encodeURIComponent(row.username)}`}
-                  className="truncate font-black hover:text-[var(--brand-strong)] hover:underline"
+                  className="truncate font-black hover:text-[var(--brand-text)] hover:underline"
                 >
                   {row.username}
                   {row.userId === viewerId ? " (you)" : ""}

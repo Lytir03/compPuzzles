@@ -44,3 +44,5 @@ next-env.d.ts
 # prisma generated client
 /database/generated
 
+# Supabase CLI runtime state and generated local service bundles
+/supabase/.temp/

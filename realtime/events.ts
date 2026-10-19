@@ -1,7 +1,9 @@
 import type { Difficulty, GameType } from "@/database/generated/client/enums";
+import type { RankedModeId } from "@/games/modes";
 
 export interface MatchFoundPayload {
   matchId: string;
+  modeId: RankedModeId;
   gameType: GameType;
   difficulty: Difficulty;
   /** Given/clue state — never the solution. */
@@ -27,8 +29,10 @@ export interface MatchResultPayload {
 }
 
 export interface ClientToServerEvents {
-  "queue:join": (data: { gameType: GameType; difficulty: Difficulty }) => void;
+  "queue:join": (data: { modeId: RankedModeId }) => void;
   "queue:leave": () => void;
+  /** Replays authoritative state for an opaque match id after reload/reconnect. */
+  "match:sync": (data: { matchId: string }) => void;
   "match:progress": (data: { matchId: string; percent: number }) => void;
   "match:submit": (data: { matchId: string; payload: string }) => void;
 }

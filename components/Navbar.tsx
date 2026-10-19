@@ -18,7 +18,7 @@ export async function Navbar() {
             <span className="rounded-[3px] bg-[#f6ca65]" />
           </span>
           <span className="text-lg font-black tracking-[-0.04em]">
-            Comp<span className="text-[var(--brand-strong)]">Puzzles</span>
+            Comp<span className="text-[var(--brand-text)]">Puzzles</span>
           </span>
         </Link>
         <div className="flex items-center gap-1 sm:gap-2">
@@ -32,6 +32,9 @@ export async function Navbar() {
               </Link>
               <Link href="/matches" className="nav-link hidden px-3 py-2 text-sm font-bold md:block">
                 History
+              </Link>
+              <Link href="/account" className="nav-link hidden px-3 py-2 text-sm font-bold lg:block">
+                Settings
               </Link>
               {/* The username chip is the profile entry point — it used to be
                   inert text, leaving the profile page unreachable from the nav. */}

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { INITIAL_RATING } from "./constants";
 import { updateRating, updateRatingsForMatch } from "./glicko2";
 
 describe("updateRating", () => {
@@ -32,20 +33,20 @@ describe("updateRating", () => {
 });
 
 describe("updateRatingsForMatch", () => {
-  const DEFAULT = { rating: 1500, ratingDeviation: 350, volatility: 0.06 };
+  const DEFAULT = { rating: INITIAL_RATING, ratingDeviation: 350, volatility: 0.06 };
 
   it("raises the winner's rating and lowers the loser's, symmetrically for equal starting players", () => {
     const { a, b } = updateRatingsForMatch(DEFAULT, DEFAULT, "WIN");
-    expect(a.rating).toBeGreaterThan(1500);
-    expect(b.rating).toBeLessThan(1500);
+    expect(a.rating).toBeGreaterThan(INITIAL_RATING);
+    expect(b.rating).toBeLessThan(INITIAL_RATING);
     // Equal starting ratings/RDs -> near-symmetric single-game update.
-    expect(a.rating - 1500).toBeCloseTo(1500 - b.rating, 1);
+    expect(a.rating - INITIAL_RATING).toBeCloseTo(INITIAL_RATING - b.rating, 1);
   });
 
   it("barely changes either rating on a draw between equally-rated players", () => {
     const { a, b } = updateRatingsForMatch(DEFAULT, DEFAULT, "DRAW");
-    expect(a.rating).toBeCloseTo(1500, 0);
-    expect(b.rating).toBeCloseTo(1500, 0);
+    expect(a.rating).toBeCloseTo(INITIAL_RATING, 0);
+    expect(b.rating).toBeCloseTo(INITIAL_RATING, 0);
   });
 
   it("rewards an upset (beating a much higher-rated opponent) more than beating an easy target", () => {

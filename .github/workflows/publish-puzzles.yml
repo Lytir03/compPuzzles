@@ -1,0 +1,88 @@
+name: Publish production puzzle catalog
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        description: Full 40-character main commit SHA reviewed for production
+        required: true
+        type: string
+      target_per_mode:
+        description: Published puzzles to retain per Sudoku/Nonogram mode (1-500)
+        required: true
+        default: "100"
+        type: string
+      confirmation:
+        description: Type PUBLISH_PUZZLES exactly
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-puzzle-publisher
+  cancel-in-progress: false
+
+jobs:
+  validate-request:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Require trusted main revision and bounded target
+        env:
+          REQUESTED_SHA: ${{ inputs.commit_sha }}
+          TARGET_PER_MODE: ${{ inputs.target_per_mode }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -Eeuo pipefail
+          if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
+            echo "Puzzle publication may run only from main." >&2
+            exit 1
+          fi
+          if [[ ! "${REQUESTED_SHA}" =~ ^[0-9a-f]{40}$ ]] || [[ "${REQUESTED_SHA}" != "${GITHUB_SHA}" ]]; then
+            echo "commit_sha must be the full SHA of this workflow run." >&2
+            exit 1
+          fi
+          if [[ ! "${TARGET_PER_MODE}" =~ ^[0-9]+$ ]] || (( TARGET_PER_MODE < 1 || TARGET_PER_MODE > 500 )); then
+            echo "target_per_mode must be an integer from 1 through 500." >&2
+            exit 1
+          fi
+          if [[ "${CONFIRMATION}" != "PUBLISH_PUZZLES" ]]; then
+            echo "The production confirmation phrase does not match." >&2
+            exit 1
+          fi
+
+  publish:
+    needs: validate-request
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    # Require reviewers, main-only deployment branches and no self-review.
+    environment: production-puzzle-writer
+    steps:
+      - name: Check out the reviewed commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install the reviewed dependency lock
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run db:generate
+
+      - name: Top up the production catalog through the restricted writer role
+        env:
+          DATABASE_URL: ${{ secrets.PUZZLE_WRITER_DATABASE_URL }}
+          DATABASE_POOL_MAX: "2"
+          NODE_ENV: production
+          SUDOKU_PUZZLES_PER_DIFFICULTY: ${{ inputs.target_per_mode }}
+          NONOGRAM_PUZZLES_PER_DIFFICULTY: ${{ inputs.target_per_mode }}
+        run: npm run db:seed

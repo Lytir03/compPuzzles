@@ -8,8 +8,9 @@ section before starting any new phase.
 ## What this project is
 
 A web-only competitive puzzle platform ("Chess.com for puzzle games").
-Ranked 1v1 matches across Sudoku, Mini Crosswords, and Nonograms, with
-per-game ratings, matchmaking, leaderboards, and match history. Full detail:
+Ranked 1v1 matches across Sudoku and Nonograms, plus local no-guess
+Minesweeper practice, per-game ratings, matchmaking, leaderboards, and match
+history. Crossword code is archived and unreachable. Full detail:
 `docs/SPEC.md`.
 
 ## Non-negotiables (violating these is a bug, not a style choice)
@@ -33,51 +34,32 @@ per-game ratings, matchmaking, leaderboards, and match history. Full detail:
 - **Rating changes happen inside a DB transaction.** A match must never award
   rating twice, and rating writes must be atomic with match-result writes.
 - **Independent ratings per game.** No shared/universal rating.
-- **No monetization, no native apps, no social features** in MVP scope — see
-  `docs/SPEC.md` §2 for the explicit exclusion list. If a task seems to need
-  one of these, stop and flag it rather than building it.
-- **Sudoku ships completely (Phase 1–4) before Nonograms or Crosswords
-  start.** Do not parallelize game verticals.
+- **No active ads, prizes, native apps, or social features in the beta.** Ad
+  slots are inert vendor-neutral boundaries until a separate legal/CMP gate.
 
 ## Tech stack (do not deviate without flagging it first)
 
 - Next.js + React + TypeScript + Tailwind CSS
 - PostgreSQL + Prisma
-- Auth: **Clerk, deferred.** SPEC §17 locks in Clerk, but as of 2026-08-11
-  the user asked to skip it while the build stays local-only — no point
-  standing up a hosted auth provider for a single-machine demo. Current
-  stand-in: a local username-only session (no password) in `auth/session.ts`
-  (httpOnly cookie), `auth/currentUser.ts`, `auth/login.ts` (upserts a `User`
-  by username, no identity check), and `auth/logout.ts`. `User.clerkId` and
-  `User.email` are nullable in the schema for exactly this reason. Swap Clerk
-  back in through this same seam (those four files) once there's an actual
-  reason to deploy somewhere other than localhost — don't let this stand-in
-  quietly become permanent.
-  The cookie and the socket handshake token are **HMAC-signed and expiring**
-  (`lib/signedToken.ts`, keyed by `AUTH_SECRET`; a public dev fallback is used
-  locally, and startup refuses to run without a real one in production). That
-  isn't cosmetic: they used to be bare userIds, and userIds aren't secret, so
-  anyone holding one could connect to the realtime server as that player, kick
-  them out of a live match, and take their rating. Don't "simplify" either
-  back to a raw id — signing is what stops impersonation, even though the
-  login itself is still passwordless.
+- Auth: **Supabase email/password with mandatory email verification.** Next is
+  a server-only BFF: no browser Supabase client and no access/refresh token in
+  JavaScript. Request-scoped `@supabase/ssr` clients use hardened HttpOnly
+  cookies. Supabase owns password hashes, reset tokens, and sessions; Prisma
+  must never model or read them. Account identity and competitive history are
+  separated as `AccountProfile -> Competitor`.
 - Realtime: **Socket.IO** — automatic reconnection (needed for the disconnect
   grace-period requirement) and room support (one room per match) without
   hand-rolling either. It's a separate process from Next.js (port 4000 vs.
   3000) — those are different origins, and the session cookie is
   SameSite=Lax, which browsers don't reliably send on cross-origin
   XHR/WebSocket handshakes. So socket auth does **not** use the cookie:
-  the client fetches its own userId same-origin via
-  `auth/realtimeToken.ts` and passes it as the socket handshake's
-  `auth.token` (see `realtime/auth.ts`). Don't "simplify" this back to
-  cookie-based auth — it'll silently fail in a real browser.
-- Deployment: **local only for now.** Everything (Next.js dev server, Socket.IO
-  process, Postgres) runs on localhost — no hosting, no split-deployment
-  concerns. This is a "get something working and demoable" build, not a
-  production deploy. Modular monolith either way — no microservices.
-  Revisit hosting (Vercel + a separate always-on Node service for Socket.IO,
-  since Vercel serverless functions can't hold a persistent WS connection)
-  only when there's an actual reason to put this in front of other people.
+  the client requests a one-use 90-second Ed25519 admission ticket from
+  `auth/realtimeToken.ts` and passes it only as `auth.ticket`. Never expose a
+  Supabase bearer token, put tickets in URLs/storage, or reuse a JTI.
+- Deployment: **public beta without an SLA.** Netlify runs web/BFF, Supabase EU
+  runs Auth/Postgres/Data API, one Railway EU replica runs Socket.IO, and
+  Upstash stores distributed rate/replay/revocation state. See
+  `docs/DEPLOYMENT.md`; never give Netlify a database or service-role secret.
 
 ## Code organization
 
@@ -138,18 +120,16 @@ How that's implemented (Phase 7) — extend these rather than reinventing:
   to crash the whole realtime process for every player in every live match.
   A new client→server event needs a parser and a `guard()` wrapper — no
   exceptions.
-- **Server actions** are a public HTTP endpoint too. Use the helpers in
-  `lib/actionGuards.ts` (`assertDifficulty`, `assertPuzzleId`,
-  `assertDurationMs`, `enforceRateLimit`) — don't trust an argument because a
-  typed component happens to call it.
-- **Rate limits** live in `lib/rateLimit.ts` (in-memory token bucket, one
-  rule table for sockets and one for actions). Process-local, matching
-  `realtime/state.ts`; that's the seam to swap for Redis if this ever runs
-  multi-instance.
+- **Server actions** are public HTTP endpoints. Validate exact shapes and
+  lengths, enforce same-origin mutations, Turnstile where required, and use
+  the distributed auth limiter in `auth/rateLimit.ts`.
+- **Authoritative mutations** use Upstash-backed rate limits in production and
+  fail closed when the security store is unavailable. Never clear a bucket on
+  socket disconnect.
 - **Match finalization** claims the match with a compare-and-set on status
   *inside* the transaction (`realtime/matchLifecycle.ts`); the pre-transaction
   status read alone can't stop two concurrent finalizations. The
-  `@@unique([userId, matchId])` on `RatingChange` is the DB-level backstop.
+  `@@unique([competitorId, matchId])` on `RatingChange` is the DB-level backstop.
 
 ## Commands
 
@@ -157,24 +137,23 @@ Fill these in once the project is scaffolded (Phase 1) so future sessions
 don't have to rediscover them:
 
 ```
-# dev server:                     npm run dev
-# realtime (Socket.IO) process:   npm run realtime      (separate process, port 4000 by default — run alongside `npm run dev`)
+# local Supabase:                 npm run db:start
+# one-time local env:             npm run setup:local
+# dev server:                     npm run dev:web
+# realtime (Socket.IO) process:   npm run dev:realtime
 # run tests:                      npm run test          (npm run test:watch for watch mode)
 # lint:                           npm run lint
 # typecheck:                      npm run typecheck
-# db migrate:                     npm run db:migrate    (requires `docker compose up -d` first)
-# db seed:                        npm run db:seed  (SUDOKU_PUZZLES_PER_DIFFICULTY=100 / NONOGRAM_PUZZLES_PER_DIFFICULTY=100 to scale up; default 20/difficulty each, idempotent top-up; also creates the `demo_one` /
-#                                 `demo_two` accounts for two-player testing)
+# db reset/migrate:               npm run db:reset / npm run db:migrate
+# db seed (puzzles only):         npm run db:seed
 # db generate (Prisma client):    npm run db:generate
-# db studio (inspect data):       npm run db:studio
+# RLS tests:                      npm run test:rls
+# schema authority check:         npm run schema:check
 ```
 
-Postgres runs locally via Docker (`docker-compose.yml` at repo root, service
-`postgres`, port 5432) — no managed/cloud DB needed at this stage. Bring it up
-with `docker compose up -d` before running migrations or `npm run dev`.
-
-No Clerk setup needed right now — see the Tech stack section above for why
-auth is a local username-only stand-in instead.
+Supabase SQL migrations are the sole schema authority. Prisma is a typed client
+only: `generate` and `validate` are allowed; never run Prisma migrate/db push.
+Local Supabase uses ports 55321–55324 and Mailpit for verification/reset mail.
 
 ## When in doubt
 

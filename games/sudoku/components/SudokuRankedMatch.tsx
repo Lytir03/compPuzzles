@@ -12,16 +12,31 @@ import { gridToString } from "../engine";
 import { calculateProgress } from "../progress";
 import { SudokuBoard } from "./SudokuBoard";
 
-const DIFFICULTIES: RankedDifficultyOption[] = [
-  { value: Difficulty.EASY, label: "Easy", detail: "Steady sprint", tone: "bg-[#e2f1d4] text-[#47752d]" },
-  { value: Difficulty.MEDIUM, label: "Medium", detail: "Tactical race", tone: "bg-[#fff0c9] text-[#8a6419]" },
-  { value: Difficulty.HARD, label: "Hard", detail: "Full focus", tone: "bg-[#fde0db] text-[#9d4134]" },
+export const SUDOKU_RANKED_DIFFICULTIES: RankedDifficultyOption[] = [
+  {
+    value: Difficulty.EASY,
+    label: "6×6 Challenge",
+    detail: "Fewer clues · fast, not easy",
+    tone: "bg-[#dcecf4] text-[#35657e]",
+  },
+  {
+    value: Difficulty.MEDIUM,
+    label: "Easy 9×9",
+    detail: "Classic grid · more clues",
+    tone: "bg-[#fff0c9] text-[#8a6419]",
+  },
+  {
+    value: Difficulty.HARD,
+    label: "Hard 9×9",
+    detail: "Sparse clues · full focus",
+    tone: "bg-[#fde0db] text-[#9d4134]",
+  },
 ];
 
-const CHROME: GameChrome = {
+export const SUDOKU_RANKED_CHROME: GameChrome = {
   title: "Sudoku arena",
   gameLabel: "Sudoku",
-  tagline: "You and your opponent get the same grid. First correct solve wins the match and rating.",
+  tagline: "Race a challenging 6×6, an easy 9×9, or a hard 9×9. First correct solve wins.",
   icon: "⚡",
   heroClass: "bg-[#344d68]",
 };
@@ -42,11 +57,16 @@ export function SudokuRankedMatch() {
   const handleSubmit = useCallback((grid: number[]) => submit(gridToString(grid)), [submit]);
 
   return (
-    <RankedMatchShell controller={controller} chrome={CHROME} difficulties={DIFFICULTIES}>
+    <RankedMatchShell
+      controller={controller}
+      chrome={SUDOKU_RANKED_CHROME}
+      difficulties={SUDOKU_RANKED_DIFFICULTIES}
+    >
       {match && (
         <SudokuBoard
           key={match.matchId}
           initialGrid={match.payload}
+          disabled={controller.awaitingVerdict}
           onSubmit={handleSubmit}
           onProgress={handleProgress}
         />

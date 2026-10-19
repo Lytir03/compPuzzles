@@ -1,6 +1,7 @@
 import {
   cluesEqual,
   deriveClues,
+  isValidGrid,
   type NonogramDimensions,
   type NonogramGrid,
   type NonogramPuzzlePayload,
@@ -28,9 +29,10 @@ export function validateCompletion(
   submittedGrid: NonogramGrid,
 ): CompletionResult {
   const dims: NonogramDimensions = { width: target.width, height: target.height };
-  if (submittedGrid.length !== dims.width * dims.height) {
+  if (!Array.isArray(submittedGrid) || submittedGrid.length !== dims.width * dims.height) {
     throw new Error(`Expected a ${dims.width * dims.height}-cell grid`);
   }
+  if (!isValidGrid(submittedGrid, dims)) return { complete: false, correct: false };
 
   const derived = deriveClues(submittedGrid, dims);
   const matches =

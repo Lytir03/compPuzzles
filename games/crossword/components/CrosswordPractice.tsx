@@ -16,8 +16,8 @@ type State =
   | { status: "idle" }
   | { status: "loading"; difficulty: Difficulty }
   | { status: "error"; difficulty: Difficulty; message: string }
-  | { status: "playing"; difficulty: Difficulty; puzzleId: string; payload: string }
-  | { status: "submitting"; difficulty: Difficulty; puzzleId: string; payload: string }
+  | { status: "playing"; difficulty: Difficulty; assignmentId: string; payload: string }
+  | { status: "submitting"; difficulty: Difficulty; assignmentId: string; payload: string }
   | { status: "result"; difficulty: Difficulty; correct: boolean; elapsedMs: number };
 
 export function CrosswordPractice() {
@@ -27,7 +27,7 @@ export function CrosswordPractice() {
     setState({ status: "loading", difficulty });
     try {
       const puzzle = await startPracticePuzzle(difficulty);
-      setState({ status: "playing", difficulty, puzzleId: puzzle.puzzleId, payload: puzzle.payload });
+      setState({ status: "playing", difficulty, assignmentId: puzzle.assignmentId, payload: puzzle.payload });
     } catch (error) {
       setState({
         status: "error",
@@ -39,12 +39,12 @@ export function CrosswordPractice() {
 
   async function handleSubmit(
     difficulty: Difficulty,
-    puzzleId: string,
+    assignmentId: string,
     grid: CrosswordGrid,
     elapsedMs: number,
   ) {
-    setState({ status: "submitting", difficulty, puzzleId, payload: encodeGrid(grid) });
-    const result = await submitPracticeSolution(puzzleId, encodeGrid(grid), elapsedMs);
+    setState({ status: "submitting", difficulty, assignmentId, payload: encodeGrid(grid) });
+    const result = await submitPracticeSolution(assignmentId, encodeGrid(grid), elapsedMs);
     setState({ status: "result", difficulty, correct: result.correct, elapsedMs });
   }
 
@@ -89,7 +89,7 @@ export function CrosswordPractice() {
               ))}
             </div>
             {state.status === "loading" && (
-              <p className="mt-5 animate-pulse text-center text-sm font-bold text-[var(--brand-strong)]">
+              <p className="mt-5 animate-pulse text-center text-sm font-bold text-[var(--brand-text)]">
                 Building your puzzle…
               </p>
             )}
@@ -109,7 +109,7 @@ export function CrosswordPractice() {
     return (
       <div className="flex flex-col items-center gap-6 py-6 sm:py-8">
         <CrosswordBoard
-          key={state.puzzleId}
+          key={state.assignmentId}
           title={title}
           width={width}
           height={height}
@@ -117,7 +117,7 @@ export function CrosswordPractice() {
           across={across}
           down={down}
           disabled={state.status === "submitting"}
-          onSubmit={(grid, elapsedMs) => handleSubmit(state.difficulty, state.puzzleId, grid, elapsedMs)}
+          onSubmit={(grid, elapsedMs) => handleSubmit(state.difficulty, state.assignmentId, grid, elapsedMs)}
         />
       </div>
     );

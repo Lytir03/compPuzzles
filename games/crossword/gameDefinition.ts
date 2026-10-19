@@ -32,21 +32,16 @@ function toPayload(puzzle: {
 
 async function createMatch(
   difficulty: Difficulty,
-  participantUserIds: string[],
+  _participantCompetitorIds: string[],
 ): Promise<PuzzleAssignment> {
+  void _participantCompetitorIds;
   const where = {
     gameType: GameType.CROSSWORD,
     difficulty,
     status: PuzzleStatus.PUBLISHED,
   } as const;
 
-  let candidates = await prisma.puzzle.findMany({
-    where: { ...where, attempts: { none: { userId: { in: participantUserIds } } } },
-    select: { id: true },
-  });
-  if (candidates.length === 0) {
-    candidates = await prisma.puzzle.findMany({ where, select: { id: true } });
-  }
+  const candidates = await prisma.puzzle.findMany({ where, select: { id: true } });
   if (candidates.length === 0) {
     throw new Error(`No ${difficulty} Crossword puzzles available — run "npm run db:seed".`);
   }
@@ -73,10 +68,11 @@ async function getPuzzlePayload(puzzleId: string): Promise<string> {
 async function validateCompletion(puzzleId: string, submittedPayload: string) {
   const puzzle = await prisma.puzzle.findUnique({
     where: { id: puzzleId },
-    include: { crossword: true },
+    include: { crossword: { include: { secret: true } } },
   });
   if (!puzzle?.crossword) throw new Error(`No Crossword puzzle found for id ${puzzleId}`);
-  const solution = puzzle.crossword.answers as CrosswordGrid;
+  if (!puzzle.crossword.secret) throw new Error(`Crossword ${puzzleId} has no private answer key`);
+  const solution = puzzle.crossword.secret.answers as CrosswordGrid;
   return validateCrosswordCompletion(solution, decodeGrid(submittedPayload));
 }
 

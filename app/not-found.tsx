@@ -20,7 +20,7 @@ export default function NotFound() {
         <Link href="/dashboard" className="game-button mt-7 rounded-xl px-6 py-3.5 text-base font-black">
           Back to the game lobby
         </Link>
-        <Link href="/leaderboard" className="mt-3 text-sm font-bold text-[var(--brand-strong)] hover:underline">
+        <Link href="/leaderboard" className="mt-3 text-sm font-bold text-[var(--brand-text)] hover:underline">
           See the leaderboard
         </Link>
       </section>

@@ -1,9 +1,11 @@
 "use server";
 
-import { redirect } from "next/navigation";
-import { clearSession } from "./session";
+import { signOut as secureSignOut } from "./actions";
 
-export async function logout() {
-  await clearSession();
-  redirect("/");
+export async function signOut(): Promise<never> {
+  return secureSignOut();
+}
+
+export async function logout(): Promise<never> {
+  return secureSignOut();
 }

@@ -47,4 +47,9 @@ describe("validateCompletion", () => {
   it("throws on a grid of the wrong size", () => {
     expect(() => validateCompletion(target, [FILLED, 0])).toThrow();
   });
+
+  it.each([99, -1, NaN, null, "0"])("rejects invalid empty cell state %s", (value) => {
+    const submitted = [FILLED, value, FILLED, FILLED, FILLED, FILLED] as number[];
+    expect(validateCompletion(target, submitted).correct).toBe(false);
+  });
 });

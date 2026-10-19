@@ -1,0 +1,152 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:55322/postgres
+      NEXT_PUBLIC_APP_URL: http://127.0.0.1:3000
+      NEXT_PUBLIC_SITE_URL: http://127.0.0.1:3000
+      NEXT_PUBLIC_REALTIME_URL: http://127.0.0.1:4000
+      APP_ORIGIN: http://127.0.0.1:3000
+      ALLOWED_ORIGINS: http://127.0.0.1:3000
+      SUPABASE_URL: http://127.0.0.1:55321
+      SUPABASE_PUBLISHABLE_KEY: ci-publishable-key
+      NEXT_PUBLIC_TURNSTILE_SITE_KEY: 1x00000000000000000000AA
+      PRACTICE_API_SECRET: ci-only-practice-secret-with-at-least-32-bytes
+      ADS_ENABLED: "false"
+      ADS_PLACEHOLDERS_ENABLED: "false"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Set up pinned Supabase CLI
+        uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520 # v3.0.0
+        with:
+          version: 2.101.0
+
+      - name: Apply Supabase migrations to a fresh local stack
+        run: |
+          supabase start
+          supabase db reset
+
+      - name: Generate and validate Prisma client model
+        run: |
+          npm run db:generate
+          npm run db:validate
+
+      - name: Lint the migrated database
+        run: supabase db lint --local --level warning
+
+      - name: Test RLS and database contracts
+        run: npm run test:rls
+
+      - name: Test direct Auth password and confirmation policy
+        run: npm run test:auth-e2e
+
+      - name: Test ranked Sudoku and Nonogram loops
+        run: npm run test:ranked-e2e
+
+      - name: Reject unsafe SQL and committed secrets
+        run: |
+          npm run schema:check
+          scripts/check-unsafe-sql.sh
+          scripts/scan-secrets.sh
+
+      - name: Validate the secret-free Netlify production build boundary
+        env:
+          NEXT_PUBLIC_SITE_URL: https://ci.example.invalid
+          NEXT_PUBLIC_APP_URL: https://ci.example.invalid
+          NEXT_PUBLIC_REALTIME_URL: https://realtime.ci.example.invalid
+          NEXT_PUBLIC_TURNSTILE_SITE_KEY: ci-public-site-key
+          NEXT_PUBLIC_SENTRY_DSN: https://public@example.ingest.sentry.io/1
+          LEGAL_CONTROLLER_NAME: CI Controller
+          LEGAL_CONTROLLER_COUNTRY: Italy
+          NEXT_PUBLIC_PRIVACY_EMAIL: privacy@example.invalid
+          NEXT_PUBLIC_SECURITY_EMAIL: security@example.invalid
+          ADS_ENABLED: "false"
+          ADS_PLACEHOLDERS_ENABLED: "false"
+          CSP_ENFORCE: "true"
+        run: |
+          unset DATABASE_URL PRACTICE_API_SECRET SUPABASE_URL SUPABASE_PUBLISHABLE_KEY
+          node scripts/validate-build-env.mjs
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build production bundle
+        run: npm run build
+
+      - name: Build realtime production image
+        run: docker build --file Dockerfile.realtime --tag comppuzzles-realtime:ci .
+
+      - name: Smoke-test realtime readiness
+        env:
+          UPSTASH_REDIS_REST_TOKEN: ci-only-token
+          REALTIME_REDIS_KEY_SECRET: ci-realtime-key-secret-with-32-bytes
+          PRACTICE_API_SECRET: ci-practice-api-secret-with-32-bytes
+        run: |
+          openssl genpkey -algorithm ED25519 -out /tmp/realtime-private.pem
+          openssl pkey -in /tmp/realtime-private.pem -pubout -out /tmp/realtime-public.pem
+          public_key="$(cat /tmp/realtime-public.pem)"
+          container_id="$(docker run --detach --network host \
+            --env NODE_ENV=production \
+            --env PORT=4000 \
+            --env DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:55322/postgres \
+            --env NEXT_PUBLIC_APP_URL=https://ci.example.invalid \
+            --env REALTIME_ALLOWED_ORIGINS=https://ci.example.invalid \
+            --env UPSTASH_REDIS_REST_URL=https://ci.invalid \
+            --env UPSTASH_REDIS_REST_TOKEN \
+            --env REALTIME_REDIS_KEY_SECRET \
+            --env PRACTICE_API_SECRET \
+            --env REALTIME_JWS_KEY_ID=ci-key \
+            --env REALTIME_JWS_PUBLIC_KEY="$public_key" \
+            --env REALTIME_JWS_ISSUER=https://ci.example.invalid \
+            --env REALTIME_JWS_AUDIENCE=comppuzzles-realtime \
+            comppuzzles-realtime:ci)"
+          trap 'docker logs "${container_id}"; docker rm --force "${container_id}" >/dev/null' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:4000/health/ready >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          exit 1
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Stop local Supabase stack
+        if: always()
+        run: supabase stop --no-backup

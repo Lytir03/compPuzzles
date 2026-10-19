@@ -1,28 +1,29 @@
 import {
-  BOX_SIZE,
-  CELL_COUNT,
   EMPTY,
-  GRID_SIZE,
   type SudokuGrid,
+  type SudokuRules,
   boxOf,
   cellIndex,
   colOf,
   rowOf,
+  rulesForGrid,
 } from "./engine";
 
-function buildUnits(): number[][] {
+function buildUnits(rules: SudokuRules): number[][] {
   const units: number[][] = [];
-  for (let r = 0; r < GRID_SIZE; r++) {
-    units.push(Array.from({ length: GRID_SIZE }, (_, c) => cellIndex(r, c)));
+  for (let row = 0; row < rules.size; row++) {
+    units.push(Array.from({ length: rules.size }, (_, col) => cellIndex(row, col, rules)));
   }
-  for (let c = 0; c < GRID_SIZE; c++) {
-    units.push(Array.from({ length: GRID_SIZE }, (_, r) => cellIndex(r, c)));
+  for (let col = 0; col < rules.size; col++) {
+    units.push(Array.from({ length: rules.size }, (_, row) => cellIndex(row, col, rules)));
   }
-  for (let boxRow = 0; boxRow < GRID_SIZE; boxRow += BOX_SIZE) {
-    for (let boxCol = 0; boxCol < GRID_SIZE; boxCol += BOX_SIZE) {
+  for (let boxRow = 0; boxRow < rules.size; boxRow += rules.boxRows) {
+    for (let boxCol = 0; boxCol < rules.size; boxCol += rules.boxCols) {
       const box: number[] = [];
-      for (let r = boxRow; r < boxRow + BOX_SIZE; r++) {
-        for (let c = boxCol; c < boxCol + BOX_SIZE; c++) box.push(cellIndex(r, c));
+      for (let row = boxRow; row < boxRow + rules.boxRows; row++) {
+        for (let col = boxCol; col < boxCol + rules.boxCols; col++) {
+          box.push(cellIndex(row, col, rules));
+        }
       }
       units.push(box);
     }
@@ -30,24 +31,21 @@ function buildUnits(): number[][] {
   return units;
 }
 
-const UNITS = buildUnits();
-
-/** Indices of every filled cell that shares a row/col/box with an equal value. */
+/** Indices of every filled cell that shares a row/column/box with an equal value. */
 export function findConflicts(grid: SudokuGrid): Set<number> {
+  const rules = rulesForGrid(grid);
   const conflicts = new Set<number>();
-  for (const unit of UNITS) {
+  for (const unit of buildUnits(rules)) {
     const seenAt = new Map<number, number[]>();
-    for (const idx of unit) {
-      const value = grid[idx];
+    for (const index of unit) {
+      const value = grid[index];
       if (value === EMPTY) continue;
       const indices = seenAt.get(value) ?? [];
-      indices.push(idx);
+      indices.push(index);
       seenAt.set(value, indices);
     }
     for (const indices of seenAt.values()) {
-      if (indices.length > 1) {
-        for (const idx of indices) conflicts.add(idx);
-      }
+      if (indices.length > 1) indices.forEach((index) => conflicts.add(index));
     }
   }
   return conflicts;
@@ -57,70 +55,51 @@ export function isGridFull(grid: SudokuGrid): boolean {
   return grid.every((value) => value !== EMPTY);
 }
 
-const ALL_DIGITS_MASK = 0b1111111110; // bits 1-9
-
 function popcount(mask: number): number {
   let count = 0;
-  for (let m = mask; m !== 0; count++) {
-    m &= m - 1;
-  }
+  for (let remaining = mask; remaining !== 0; count++) remaining &= remaining - 1;
   return count;
 }
 
-/**
- * Backtracking search with bitmasked row/col/box constraints and a
- * minimum-remaining-values heuristic: always branch on the empty cell with
- * the fewest legal digits left, so dead ends surface immediately instead of
- * many moves later. Plain fixed-order backtracking is fast on easy grids but
- * blows up badly on some 26-30-clue ones — MRV is the standard fix and is
- * what keeps puzzle carving (many uniqueness checks per generated puzzle)
- * fast.
- *
- * Given cells that already conflict with each other are checked up front
- * and short-circuit to zero solutions. Without this, proving a grid with
- * conflicting givens has no solution means exhausting a huge fraction of
- * the search space — even MRV doesn't help there, since the contradiction
- * is between two fixed cells the search never revisits.
- */
+/** MRV backtracking solver shared by the 6×6 and 9×9 generators. */
 function search(grid: SudokuGrid, limit: number): SudokuGrid[] {
+  const rules = rulesForGrid(grid);
   if (findConflicts(grid).size > 0) return [];
 
   const working = [...grid];
-  const rowMask = new Array<number>(GRID_SIZE).fill(0);
-  const colMask = new Array<number>(GRID_SIZE).fill(0);
-  const boxMask = new Array<number>(GRID_SIZE).fill(0);
+  const rowMask = new Array<number>(rules.size).fill(0);
+  const colMask = new Array<number>(rules.size).fill(0);
+  const boxMask = new Array<number>(rules.size).fill(0);
   const remaining = new Set<number>();
+  const allDigitsMask = (1 << (rules.size + 1)) - 2;
 
-  for (let i = 0; i < CELL_COUNT; i++) {
-    const value = working[i];
+  for (let index = 0; index < working.length; index++) {
+    const value = working[index];
     if (value === EMPTY) {
-      remaining.add(i);
+      remaining.add(index);
       continue;
     }
     const bit = 1 << value;
-    rowMask[rowOf(i)] |= bit;
-    colMask[colOf(i)] |= bit;
-    boxMask[boxOf(i)] |= bit;
+    rowMask[rowOf(index, rules)] |= bit;
+    colMask[colOf(index, rules)] |= bit;
+    boxMask[boxOf(index, rules)] |= bit;
   }
 
   const solutions: SudokuGrid[] = [];
+  const candidatesFor = (index: number) =>
+    allDigitsMask &
+    ~(rowMask[rowOf(index, rules)] | colMask[colOf(index, rules)] | boxMask[boxOf(index, rules)]);
 
-  function candidatesFor(idx: number): number {
-    const used = rowMask[rowOf(idx)] | colMask[colOf(idx)] | boxMask[boxOf(idx)];
-    return ALL_DIGITS_MASK & ~used;
-  }
-
-  /** The empty cell with fewest candidates, or null if none remain. */
   function pickNextCell(): number | null {
     let best: number | null = null;
-    let bestCount = 10;
-    for (const idx of remaining) {
-      const count = popcount(candidatesFor(idx));
-      if (count === 0) return idx; // dead end — fail fast rather than keep scanning
+    let bestCount = rules.size + 1;
+    for (const index of remaining) {
+      const count = popcount(candidatesFor(index));
+      if (count === 0) return index;
       if (count < bestCount) {
         bestCount = count;
-        best = idx;
-        if (count === 1) break; // can't do better than a forced cell
+        best = index;
+        if (count === 1) break;
       }
     }
     return best;
@@ -132,34 +111,33 @@ function search(grid: SudokuGrid, limit: number): SudokuGrid[] {
       return solutions.length >= limit;
     }
 
-    const idx = pickNextCell();
-    if (idx === null) return false;
-    const candidates = candidatesFor(idx);
+    const index = pickNextCell();
+    if (index === null) return false;
+    const candidates = candidatesFor(index);
     if (candidates === 0) return false;
 
-    const r = rowOf(idx);
-    const c = colOf(idx);
-    const b = boxOf(idx);
-    remaining.delete(idx);
+    const row = rowOf(index, rules);
+    const col = colOf(index, rules);
+    const box = boxOf(index, rules);
+    remaining.delete(index);
 
-    for (let digit = 1; digit <= 9; digit++) {
+    for (let digit = 1; digit <= rules.size; digit++) {
       const bit = 1 << digit;
       if (!(candidates & bit)) continue;
-
-      working[idx] = digit;
-      rowMask[r] |= bit;
-      colMask[c] |= bit;
-      boxMask[b] |= bit;
+      working[index] = digit;
+      rowMask[row] |= bit;
+      colMask[col] |= bit;
+      boxMask[box] |= bit;
 
       if (backtrack()) return true;
 
-      working[idx] = EMPTY;
-      rowMask[r] &= ~bit;
-      colMask[c] &= ~bit;
-      boxMask[b] &= ~bit;
+      working[index] = EMPTY;
+      rowMask[row] &= ~bit;
+      colMask[col] &= ~bit;
+      boxMask[box] &= ~bit;
     }
 
-    remaining.add(idx);
+    remaining.add(index);
     return false;
   }
 
@@ -171,7 +149,6 @@ export function solve(grid: SudokuGrid): SudokuGrid | null {
   return search(grid, 1)[0] ?? null;
 }
 
-/** Counts solutions up to `limit` (default 2 — just enough to prove uniqueness). */
 export function countSolutions(grid: SudokuGrid, limit = 2): number {
   return search(grid, limit).length;
 }
@@ -181,28 +158,24 @@ export interface CompletionResult {
   correct: boolean;
 }
 
-/**
- * Correctness doesn't require the stored solution: a fully-filled grid with
- * no row/col/box conflicts that preserves every given clue IS the solution,
- * because the puzzle was generated with exactly one. Keeping the solution
- * out of this check means it never has to reach the client either.
- */
 export function validateCompletion(
   givenGrid: SudokuGrid,
   submittedGrid: SudokuGrid,
 ): CompletionResult {
-  if (givenGrid.length !== CELL_COUNT || submittedGrid.length !== CELL_COUNT) {
-    throw new Error("Grid must have 81 cells");
+  if (givenGrid.length !== submittedGrid.length) {
+    throw new Error("Given and submitted Sudoku grids must have the same size");
   }
-
-  if (!isGridFull(submittedGrid)) {
+  // Also rejects unsupported lengths before any validation work.
+  const rules = rulesForGrid(givenGrid);
+  if (!Array.from(submittedGrid).every((value) => Number.isInteger(value) && value >= EMPTY && value <= rules.size)) {
     return { complete: false, correct: false };
   }
 
+  if (!isGridFull(submittedGrid)) return { complete: false, correct: false };
+
   const preservesGivens = givenGrid.every(
-    (value, idx) => value === EMPTY || value === submittedGrid[idx],
+    (value, index) => value === EMPTY || value === submittedGrid[index],
   );
   const hasConflicts = findConflicts(submittedGrid).size > 0;
-
   return { complete: true, correct: preservesGivens && !hasConflicts };
 }

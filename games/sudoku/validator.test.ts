@@ -8,6 +8,8 @@ const KNOWN_PUZZLE =
   "000047000000860070700025060600009007009000080584600003060000720100036000400050900";
 const KNOWN_SOLUTION =
   "856947312912863574743125869631589247279314685584672193365498721197236458428751936";
+const BLITZ_PUZZLE = "103450450103204061560204305602610340";
+const BLITZ_SOLUTION = "123456456123234561561234345612612345";
 
 describe("findConflicts", () => {
   it("returns empty for an empty grid", () => {
@@ -102,5 +104,27 @@ describe("validateCompletion", () => {
     expect(editableB).not.toBe(-1);
     submitted[editableB] = submitted[editableA];
     expect(validateCompletion(given, submitted).correct).toBe(false);
+  });
+
+  it("validates a complete 6×6 grid using digits 1 through 6 and 2×3 boxes", () => {
+    expect(
+      validateCompletion(gridFromString(BLITZ_PUZZLE), gridFromString(BLITZ_SOLUTION)),
+    ).toEqual({ complete: true, correct: true });
+  });
+
+  it.each([10, -1, 1.5, NaN])("rejects out-of-domain digit %s even without a duplicate", (value) => {
+    const submitted = gridFromString(KNOWN_SOLUTION);
+    submitted[given.findIndex((digit) => digit === 0)] = value;
+    expect(validateCompletion(given, submitted).correct).toBe(false);
+  });
+
+  it("rejects sparse input arrays", () => {
+    expect(validateCompletion(given, new Array(81)).correct).toBe(false);
+  });
+});
+
+describe("6×6 input validation", () => {
+  it("rejects digits above 6", () => {
+    expect(() => gridFromString(`7${"0".repeat(35)}`)).toThrow(/only accepts digits 0-6/);
   });
 });
